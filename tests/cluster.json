@@ -1,0 +1,12 @@
+{
+  "backend" : "etcd",
+  "backend-config" : {
+    "endpoints" : [
+      "http://localhost:4001"
+    ],
+    "machine-prefix" : "/deployd-test/machines",
+    "deployment-prefix" : "/deployd-test/deployments",
+    "ttl" : 60,
+    "failover-timeout" : "3s"
+  }
+}

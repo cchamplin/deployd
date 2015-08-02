@@ -1,0 +1,8 @@
+{
+  "bind-addr" : "localhost",
+  "bind-port" : 8200,
+  "allowed-tags" : [
+    "*"
+  ],
+  "allow-untagged" : false
+}

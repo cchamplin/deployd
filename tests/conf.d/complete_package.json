@@ -1,0 +1,119 @@
+[
+  {
+    "name" : "Test",
+    "version" : "0.1",
+    "id" : "test",
+    "template_before" : [
+      "mkdir -p /tmp/deployd",
+      "mkdir -p /tmp/deployd/{{.service_id}}",
+      "mkdir -p /tmp/deployd/{{.service_id}}/run",
+      "mkdir -p /tmp/deployd/{{.service_id}}/www"
+    ],
+    "templates" : [
+      {
+        "src" : "activator.socket",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
+        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [1]"
+      },
+      {
+        "src" : "activator.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
+        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [2]"
+      },
+      {
+        "src" : "php.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_php.service",
+        "description" : "Initializing Services [3]"
+      }
+    ],
+    "template_after" : []
+  },
+  {
+    "name" : "TestStrict",
+    "version" : "0.1",
+    "strict" : true,
+    "id" : "test_strict",
+    "template_before" : [
+      "mkdir /tmp/deployd",
+      "mkdir /tmp/deployd",
+      "mkdir /tmp/deployd/{{.service_id}}",
+      "mkdir /tmp/deployd/{{.service_id}}/run",
+      "mkdir /tmp/deployd/{{.service_id}}/www"
+    ],
+    "templates" : [
+      {
+        "src" : "authorized_keys",
+        "dest" : "/tmp/deployd/authorized_keys",
+        "description" : "Initializing Services [0]"
+      },
+      {
+        "src" : "activator.socket",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
+        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [1]"
+      },
+      {
+        "src" : "activator.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
+        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [2]"
+      },
+      {
+        "src" : "php.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_php.service",
+        "description" : "Initializing Services [3]"
+      }
+    ],
+    "template_after" : []
+  },
+  {
+    "name" : "TestStrict2",
+    "version" : "0.1",
+    "strict" : true,
+    "id" : "test_strict2",
+    "template_before" : [
+      "mkdir /tmp/deployd",
+      "mkdir /tmp/deployd/{{.service_id}}",
+      "mkdir /tmp/deployd/{{.service_id}}/run",
+      "mkdir /tmp/deployd/{{.service_id}}/www"
+    ],
+    "templates" : [
+      {
+        "src" : "authorized_keys",
+        "dest" : "/tmp/deployd/authorized_keys",
+        "description" : "Initializing Services [0]"
+      },
+      {
+        "src" : "activator.socket",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
+        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [1]"
+      },
+      {
+        "src" : "activator.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
+        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "description" : "Initializing Services [2]"
+      },
+      {
+        "src" : "php.service",
+        "dest" : "/tmp/deployd/{{.service_id}}_php.service",
+        "description" : "Initializing Services [3]"
+      }
+    ],
+    "template_after" : []
+  },
+  {
+    "name" : "TestShallow",
+    "version" : "0.1",
+    "id" : "test_shallow",
+    "templates" : [
+      {
+        "src" : "test.conf",
+        "dest" : "C:\\test.conf"
+      }
+    ]
+  }
+]
