@@ -28,8 +28,11 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"sync"
+
 	GoTemplate "text/template"
 )
 
@@ -151,6 +154,28 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 		for _, tmp := range tPkgs[idx].Templates {
 			//tmpl := GoTemplate.Must(GoTemplate.New(tmp.Src + "_src").Parse(tmp.Src))
 			//packages[idx].ProcessedTemplates[tmp.Src+"_src"] = tmpl
+			if tmp.Mode == "" {
+				tmp.fileMode = 0644
+			}
+			if tmp.Owner == "" {
+				tmp.uid = os.Geteuid()
+			} else {
+				if u, err := user.Lookup(tmp.Owner); err == nil {
+					if tmp.uid, err = strconv.Atoi(u.Uid); err != nil {
+						tmp.uid = os.Geteuid()
+					}
+				} else {
+					tmp.uid = os.Geteuid()
+				}
+			}
+			if tmp.Group == "" {
+				tmp.gid = os.Getgid()
+			} else {
+				// Right now we don't have a way to get a gid
+				// from a group name
+				// See: https://github.com/golang/go/issues/2617
+				tmp.gid = os.Getgid()
+			}
 			log.Trace.Printf("Processing Template: %s", tmp.Src)
 			// Most parts of the template definition (destination,template it self,
 			// commands)

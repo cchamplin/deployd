@@ -46,7 +46,7 @@ type Package struct {
 type Packages []Package
 
 // Callback from REST handler
-func (p *Package) DeployPackage(r *Repository, replacements map[string]string) *Deployment {
+func (p *Package) DeployPackage(r *Repository, replacements map[string]string, watch bool) *Deployment {
 
 	// Every deployment gets a new UUID
 	u1 := uuid.NewV4().String()
@@ -61,7 +61,23 @@ func (p *Package) DeployPackage(r *Repository, replacements map[string]string) *
 	log.Trace.Printf("Starting deployment %s of %s", u1, p.Name)
 
 	// Start go routine for this deployment
-	go deployment.Deploy(p, r.DeploymentNotifier)
+	go deployment.Deploy(p, r.DeploymentNotifier, watch)
+	return &deployment
+}
+
+func (p *Package) DeployPackageTemplate(r *Repository, templateName string, replacements map[string]string, watch bool) *Deployment {
+
+	// Every deployment gets a new UUID
+	u1 := uuid.NewV4().String()
+
+	log.Info.Printf("Deploying %s - %s:%s", u1, p.Name, templateName)
+
+	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements}
+
+	log.Trace.Printf("Starting deployment %s of %s:%s", u1, p.Name, templateName)
+
+	// Start go routine for this deployment
+	go deployment.DeployTemplate(p, r.DeploymentNotifier, templateName, watch)
 	return &deployment
 }
 

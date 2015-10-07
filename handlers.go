@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"net/http"
+	"strconv"
 )
 
 // TODO Decide what to display here
@@ -120,6 +121,11 @@ func PackageDeploy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		watch := true
+		if val,ok := r.Form["watch"]; ok {
+			watch,_ = strconv.ParseBool(val[0])
+		}
+
 		// Parse out post vairables to be used as deployment template replacements
 		items := make(map[string]string)
 		for key, values := range r.PostForm {
@@ -128,7 +134,56 @@ func PackageDeploy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		deployment := pkg.DeployPackage(repo, items)
+		deployment := pkg.DeployPackage(repo, items, watch)
+		if err := json.NewEncoder(w).Encode(deployment); err != nil {
+			log.Error.Printf("Failed to encode deployment %s response details: %v", deployment.Id, err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// If we didn't find it, 404
+	w.WriteHeader(http.StatusNotFound)
+	if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
+		log.Error.Printf("Failed to return 404, encoding error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+}
+
+func PackageDeployTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	packageId := vars["packageId"]
+	templateName := vars["templateName"]
+	pkg, err := repo.FindPackage(packageId)
+	if err == nil {
+
+		w.WriteHeader(http.StatusOK)
+
+		if err := r.ParseForm(); err != nil {
+			log.Warning.Printf("Failed to parse deployment request details: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusBadRequest, Text: "Bad Request"}); err != nil {
+				log.Error.Printf("Failed to return 400, encoding error: %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}
+
+		watch := false
+		if val,ok := r.Form["watch"]; ok {
+			watch,_ = strconv.ParseBool(val[0])
+		}
+
+		// Parse out post vairables to be used as deployment template replacements
+		items := make(map[string]string)
+		for key, values := range r.PostForm {
+			if len(values) > 0 {
+				items[key] = values[0]
+			}
+		}
+
+		deployment := pkg.DeployPackageTemplate(repo,templateName, items,watch)
 		if err := json.NewEncoder(w).Encode(deployment); err != nil {
 			log.Error.Printf("Failed to encode deployment %s response details: %v", deployment.Id, err)
 			w.WriteHeader(http.StatusInternalServerError)

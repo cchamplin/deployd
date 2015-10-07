@@ -59,6 +59,12 @@ var routes = Routes{
 		PackageDeploy,
 	},
 	Route{
+		"PackageDeployTemplate",
+		"POST",
+		"/packages/{packageId}/deploy/{templateName}",
+		PackageDeployTemplate,
+	},
+	Route{
 		"DeploymentIndex",
 		"GET",
 		"/deployments",

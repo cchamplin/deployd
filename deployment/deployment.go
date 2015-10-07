@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	//"strings"
 	GoTemplate "text/template"
@@ -56,7 +57,7 @@ type DeploymentNotifier interface {
 
 type Deployments map[string]*Deployment
 
-func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
+func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier, watch bool) {
 	log.Info.Printf("Deploying %s", p.Name)
 
 	d.StatusMessage = "Running initialization commands"
@@ -65,7 +66,7 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 		return
 	}
 
-	d.handleTemplates(p, notifier)
+	d.handleTemplates(p, notifier, watch)
 
 	d.StatusMessage = "Running finalization commands"
 	if ok := d.handleCommandTemplates(p.TemplatesAfter, p); !ok {
@@ -73,6 +74,22 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 	}
 
 	d.StatusMessage = "Package Deployed"
+	d.Status = STATUS_COMPLETE
+	if notifier != nil {
+		notifier.DeploymentComplete(d)
+	}
+}
+
+func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, templateName string, watch bool) {
+	log.Info.Printf("Deploying %s:%s", p.Name, templateName)
+
+	for i := 0; i < len(p.Templates); i++ {
+		if p.Templates[i].Src == templateName {
+			d.handleTemplate(&p.Templates[i], p, notifier, watch)
+		}
+	}
+
+	d.StatusMessage = "Package Template Deployed"
 	d.Status = STATUS_COMPLETE
 	if notifier != nil {
 		notifier.DeploymentComplete(d)
@@ -106,7 +123,7 @@ func (d *Deployment) handleCommandTemplate(tmplIdx string, p *Package) bool {
 	return true
 }
 
-func (d *Deployment) handleTemplate(tmplIdx string, p *Package, notifier DeploymentNotifier, dest string) (string, bool) {
+func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier DeploymentNotifier, dest string, watch bool) (string, bool) {
 	val, err := p.ProcessedTemplates.handle(tmplIdx, &d.Variables)
 	if err != nil {
 		log.Info.Printf("Deployment for package %s failed to complete: %v", d.PackageId, err)
@@ -114,63 +131,74 @@ func (d *Deployment) handleTemplate(tmplIdx string, p *Package, notifier Deploym
 		d.Status = STATUS_FAILED
 		return "", false
 	}
-	if notifier != nil {
+	if watch && notifier != nil {
 		for i := 0; i < len(p.Templates); i++ {
 			if p.Templates[i].Src+".tpl" == tmplIdx {
 				if p.Templates[i].Watch != "" {
 					watch, _ := p.ProcessedTemplates.handle(p.Templates[i].Watch, &d.Variables)
 					log.Info.Printf("Starting watch for template %s on key %s", tmplIdx, watch)
-
+					// TODO we should maintain an internal list of watches, and the associated
+					// meta data so we don't end up with multiple watches for the same thing
 					notifier.Watch(watch, func(value string) {
 						out, _ := p.ProcessedTemplates.handle(tmplIdx, &d.Variables)
 						log.Trace.Printf("Writing to file %s", dest)
 						d1 := []byte(out)
-						ioutil.WriteFile(dest, d1, 0644)
+						// TODO handle permissions correctly
+						ioutil.WriteFile(dest, d1, p.Templates[i].fileMode)
+						os.Chown(dest, p.Templates[i].uid, p.Templates[i].gid)
 					})
 
 				}
+				break
 			}
 		}
 	}
 	return val, true
 }
 
-func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier) bool {
+func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier, watch bool) bool {
 	for i := 0; i < len(p.Templates); i++ {
-		tmp := p.Templates[i]
-		id := tmp.Src
-		d.StatusMessage = tmp.Description
-		log.Trace.Printf("Running %s for deployment %s of package %s", d.Status, d.Id, d.PackageId)
-
-		var output string
-		var dest string
-		dest, ok := d.handleTemplate(id+"_dest", p, nil, "")
-		if !ok {
+		if ok := d.handleTemplate(&p.Templates[i], p, notifier, watch); !ok {
 			return false
 		}
-		if tmp.Before != "" {
-			if ok := d.handleCommandTemplate(id+"_before", p); !ok {
-				return false
-			}
-		}
+	}
+	return true
+}
 
-		if output, ok = d.handleTemplate(id+".tpl", p, notifier, dest); !ok {
+func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier DeploymentNotifier, watch bool) bool {
+	id := tmp.Src
+	d.StatusMessage = tmp.Description
+	log.Trace.Printf("Running %s for deployment %s of package %s", d.Status, d.Id, d.PackageId)
+
+	var output string
+	var dest string
+	dest, ok := d.handleTemplateFile(id+"_dest", p, nil, "", false)
+	if !ok {
+		return false
+	}
+	if tmp.Before != "" {
+		if ok := d.handleCommandTemplate(id+"_before", p); !ok {
 			return false
 		}
-		log.Trace.Printf("Writing to file %s", dest)
-		d1 := []byte(output)
-		err := ioutil.WriteFile(dest, d1, 0644)
-		if err != nil {
-			log.Info.Printf("Deployment for package %s failed to complete. Could not write file: %s - %v", p.Id, dest, err)
-			d.StatusMessage = fmt.Sprintf("Deployment %s of package %s failed: %v", d.Id, d.PackageId, err)
-			d.Status = STATUS_FAILED
-			return false
-		}
+	}
 
-		if tmp.After != "" {
-			if ok := d.handleCommandTemplate(id+"_after", p); !ok {
-				return false
-			}
+	if output, ok = d.handleTemplateFile(id+".tpl", p, notifier, dest, watch); !ok {
+		return false
+	}
+	log.Trace.Printf("Writing to file %s", dest)
+	d1 := []byte(output)
+	err := ioutil.WriteFile(dest, d1, os.FileMode(tmp.fileMode))
+	os.Chown(dest, tmp.uid, tmp.gid)
+	if err != nil {
+		log.Info.Printf("Deployment for package %s failed to complete. Could not write file: %s - %v", p.Id, dest, err)
+		d.StatusMessage = fmt.Sprintf("Deployment %s of package %s failed: %v", d.Id, d.PackageId, err)
+		d.Status = STATUS_FAILED
+		return false
+	}
+
+	if tmp.After != "" {
+		if ok := d.handleCommandTemplate(id+"_after", p); !ok {
+			return false
 		}
 	}
 	return true

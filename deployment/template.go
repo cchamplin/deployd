@@ -22,6 +22,10 @@
 
 package deployment
 
+import (
+	"os"
+)
+
 type Template struct {
 	Src         string `json:"src"`
 	Dest        string `json:"dest"`
@@ -30,4 +34,10 @@ type Template struct {
 	After       string `json:"after"`
 	Contents    string `json:"contents"`
 	Watch       string `json:"watch"`
+	Owner       string `json:"watch"`
+	Group       string `json:"group"`
+	Mode        string `json:"mode"`
+	fileMode    os.FileMode
+	uid         int
+	gid         int
 }
