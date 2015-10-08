@@ -40,6 +40,8 @@ type Deployment struct {
 	StatusMessage string            `json:"statusMessage"`
 	Status        string            `json:"status"`
 	Variables     map[string]string `json:"replacements"`
+	Watch         bool              `json:"watch"`
+	Template      string            `json:"template"`
 }
 
 const (
@@ -57,7 +59,7 @@ type DeploymentNotifier interface {
 
 type Deployments map[string]*Deployment
 
-func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier, watch bool) {
+func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 	log.Info.Printf("Deploying %s", p.Name)
 
 	d.StatusMessage = "Running initialization commands"
@@ -66,7 +68,7 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier, watch bool)
 		return
 	}
 
-	d.handleTemplates(p, notifier, watch)
+	d.handleTemplates(p, notifier)
 
 	d.StatusMessage = "Running finalization commands"
 	if ok := d.handleCommandTemplates(p.TemplatesAfter, p); !ok {
@@ -80,12 +82,12 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier, watch bool)
 	}
 }
 
-func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, templateName string, watch bool) {
+func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, templateName string) {
 	log.Info.Printf("Deploying %s:%s", p.Name, templateName)
 
 	for i := 0; i < len(p.Templates); i++ {
 		if p.Templates[i].Src == templateName {
-			d.handleTemplate(&p.Templates[i], p, notifier, watch)
+			d.handleTemplate(&p.Templates[i], p, notifier)
 		}
 	}
 
@@ -123,7 +125,7 @@ func (d *Deployment) handleCommandTemplate(tmplIdx string, p *Package) bool {
 	return true
 }
 
-func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier DeploymentNotifier, dest string, watch bool) (string, bool) {
+func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier DeploymentNotifier, dest string) (string, bool) {
 	val, err := p.ProcessedTemplates.handle(tmplIdx, &d.Variables)
 	if err != nil {
 		log.Info.Printf("Deployment for package %s failed to complete: %v", d.PackageId, err)
@@ -131,7 +133,7 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 		d.Status = STATUS_FAILED
 		return "", false
 	}
-	if watch && notifier != nil {
+	if d.Watch && notifier != nil {
 		for i := 0; i < len(p.Templates); i++ {
 			if p.Templates[i].Src+".tpl" == tmplIdx {
 				if p.Templates[i].Watch != "" {
@@ -156,23 +158,23 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 	return val, true
 }
 
-func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier, watch bool) bool {
+func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier) bool {
 	for i := 0; i < len(p.Templates); i++ {
-		if ok := d.handleTemplate(&p.Templates[i], p, notifier, watch); !ok {
+		if ok := d.handleTemplate(&p.Templates[i], p, notifier); !ok {
 			return false
 		}
 	}
 	return true
 }
 
-func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier DeploymentNotifier, watch bool) bool {
+func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier DeploymentNotifier) bool {
 	id := tmp.Src
 	d.StatusMessage = tmp.Description
 	log.Trace.Printf("Running %s for deployment %s of package %s", d.Status, d.Id, d.PackageId)
 
 	var output string
 	var dest string
-	dest, ok := d.handleTemplateFile(id+"_dest", p, nil, "", false)
+	dest, ok := d.handleTemplateFile(id+"_dest", p, nil, "")
 	if !ok {
 		return false
 	}
@@ -182,7 +184,7 @@ func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier Deployme
 		}
 	}
 
-	if output, ok = d.handleTemplateFile(id+".tpl", p, notifier, dest, watch); !ok {
+	if output, ok = d.handleTemplateFile(id+".tpl", p, notifier, dest); !ok {
 		return false
 	}
 	log.Trace.Printf("Writing to file %s", dest)

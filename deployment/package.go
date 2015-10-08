@@ -53,7 +53,7 @@ func (p *Package) DeployPackage(r *Repository, replacements map[string]string, w
 
 	log.Info.Printf("Deploying %s - %s", p.Name, u1)
 
-	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements}
+	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements, Watch: watch}
 
 	// This should possibly be moved to somewhere else
 	r.AddDeployment(&deployment)
@@ -61,7 +61,7 @@ func (p *Package) DeployPackage(r *Repository, replacements map[string]string, w
 	log.Trace.Printf("Starting deployment %s of %s", u1, p.Name)
 
 	// Start go routine for this deployment
-	go deployment.Deploy(p, r.DeploymentNotifier, watch)
+	go deployment.Deploy(p, r.DeploymentNotifier)
 	return &deployment
 }
 
@@ -72,12 +72,12 @@ func (p *Package) DeployPackageTemplate(r *Repository, templateName string, repl
 
 	log.Info.Printf("Deploying %s - %s:%s", u1, p.Name, templateName)
 
-	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements}
+	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements, Watch: watch, Template: templateName}
 
 	log.Trace.Printf("Starting deployment %s of %s:%s", u1, p.Name, templateName)
 
 	// Start go routine for this deployment
-	go deployment.DeployTemplate(p, r.DeploymentNotifier, templateName, watch)
+	go deployment.DeployTemplate(p, r.DeploymentNotifier, templateName)
 	return &deployment
 }
 
