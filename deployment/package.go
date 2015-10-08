@@ -25,6 +25,7 @@ package deployment
 import (
 	"../log"
 	"github.com/satori/go.uuid"
+	"os"
 	"path/filepath"
 	GoTemplate "text/template"
 )
@@ -57,14 +58,43 @@ func (p *Package) DeployPackage(r *Repository, replacements map[string]string, w
 
 	// This should possibly be moved to somewhere else
 	r.AddDeployment(&deployment)
+	r.JournalDeployment(&deployment)
 
 	log.Trace.Printf("Starting deployment %s of %s", u1, p.Name)
 
 	// Start go routine for this deployment
-	go deployment.Deploy(p, r.DeploymentNotifier)
+	go deployment.Deploy(p, r)
 	return &deployment
 }
 
+func (p *Package) ReDeployPackage(r *Repository, d *Deployment) *Deployment {
+
+	// Every deployment gets a new UUID
+	log.Info.Printf("ReDeploying %s - %s", p.Name, d.Id)
+
+	d.Status = "NOT STARTED"
+	d.StatusMessage = "Not Started"
+
+	// This should possibly be moved to somewhere else
+	// TODO What should our backend do for duplicates?
+	r.AddDeployment(d)
+	// TODO Don't journal redeployments?
+	//r.JournalDeployment(&deployment)
+
+	log.Trace.Printf("Starting re-deployment %s of %s", d.Id, p.Name)
+
+	// Start go routine for this deployment
+	go d.Deploy(p, r)
+	return d
+}
+
+// Deploy a single template file from a Package
+// TODO Should this require an existing deployment id?
+// Probably yes.
+// Is the usecase for being able to ad-hoc deploy template files
+// without deploying a whole package worthwhile and not too
+// dangerous? We may be breaking assumptions that Package
+// creators have about the state of a deployment
 func (p *Package) DeployPackageTemplate(r *Repository, templateName string, replacements map[string]string, watch bool) *Deployment {
 
 	// Every deployment gets a new UUID
@@ -74,11 +104,40 @@ func (p *Package) DeployPackageTemplate(r *Repository, templateName string, repl
 
 	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements, Watch: watch, Template: templateName}
 
+	// This should possibly be moved to somewhere else
+	// TODO should individual template deployements
+	// be counted in the backend?
+	// The case for not would be if a template deployment
+	// is simple there to update a file
+	//r.AddDeployment(&deployment)
+	r.JournalDeployment(&deployment)
+
 	log.Trace.Printf("Starting deployment %s of %s:%s", u1, p.Name, templateName)
 
 	// Start go routine for this deployment
-	go deployment.DeployTemplate(p, r.DeploymentNotifier, templateName)
+	go deployment.DeployTemplate(p, r, templateName)
 	return &deployment
+}
+
+func (p *Package) ReDeployPackageTemplate(r *Repository, d *Deployment) *Deployment {
+
+	// Every deployment gets a new UUID
+	log.Info.Printf("ReDeploying %s - %s:%s", p.Name, d.Id, d.Template)
+
+	d.Status = "NOT STARTED"
+	d.StatusMessage = "Not Started"
+
+	// This should possibly be moved to somewhere else
+	// TODO What should our backend do for duplicates?
+	//r.AddDeployment(&deployment)
+	// TODO Don't journal redeployments?
+	//r.JournalDeployment(&deployment)
+
+	log.Trace.Printf("Starting re-deployment %s of %s:%s", d.Id, p.Name, d.Template)
+
+	// Start go routine for this deployment
+	go d.DeployTemplate(p, r, d.Template)
+	return d
 }
 
 func (pkg *Package) processTemplate(name string, value string, funcMap GoTemplate.FuncMap) {
@@ -89,19 +148,26 @@ func (pkg *Package) processTemplate(name string, value string, funcMap GoTemplat
 	pkg.ProcessedTemplates[name] = tmpl
 }
 
-func (pkg *Package) processTemplateFile(configDirectory string, name string, value string, funcMap GoTemplate.FuncMap) {
+func (pkg *Package) processTemplateFile(configDirectory string, name string, value string, funcMap GoTemplate.FuncMap) error {
 	var tmpl *GoTemplate.Template
 
 	// Template files can be absolute or live locally under the
 	// configuration directory in /tpl
 	if filepath.IsAbs(value) {
+		if _, err := os.Stat(value); err != nil {
+			return err
+		}
 		tmpl = GoTemplate.Must(GoTemplate.New(name).Funcs(funcMap).ParseFiles(value))
 	} else {
 		value = configDirectory + "/tpl/" + value
+		if _, err := os.Stat(value); err != nil {
+			return err
+		}
 		tmpl = GoTemplate.Must(GoTemplate.New(name).Funcs(funcMap).ParseFiles(value))
 	}
 
 	// See above
 	tmpl.Option("missingkey=error")
 	pkg.ProcessedTemplates[name] = tmpl
+	return nil
 }

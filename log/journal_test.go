@@ -71,10 +71,10 @@ func TestJournalRead(t *testing.T) {
 		assert.Equal(t, ok, true, "")
 	}
 
-	rawEntries := journal.ReadEntries(func() interface{} {
+	entries := journal.ReadEntries(func() interface{} {
 		return &DeploymentTest{}
 	})
-	entries := rawEntries.([]interface{})
+
 	assert.Equal(t, len(entries), 10, "")
 
 	for i := 0; i < len(entries); i++ {

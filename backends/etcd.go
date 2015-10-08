@@ -280,6 +280,11 @@ func (e *EtcdBackend) DeploymentComplete(d *deployment.Deployment) {
 	}()
 }
 
+// Noop
+func (e *EtcdBackend) DeploymentFailed(d *deployment.Deployment) {
+
+}
+
 // Increment the count, which is used in recovery
 // situations
 func (e *EtcdBackend) IncrementDeploymentCount() {

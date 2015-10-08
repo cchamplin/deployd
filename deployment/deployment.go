@@ -54,6 +54,7 @@ const (
 
 type DeploymentNotifier interface {
 	DeploymentComplete(d *Deployment)
+	DeploymentFailed(d *Deployment)
 	Watch(key string, callback func(string))
 }
 
@@ -65,13 +66,24 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 	d.StatusMessage = "Running initialization commands"
 	d.Status = STATUS_WORKING
 	if ok := d.handleCommandTemplates(p.TemplatesBefore, p); !ok {
+		if notifier != nil {
+			notifier.DeploymentFailed(d)
+		}
 		return
 	}
 
-	d.handleTemplates(p, notifier)
+	if ok := d.handleTemplates(p, notifier); !ok {
+		if notifier != nil {
+			notifier.DeploymentFailed(d)
+		}
+		return
+	}
 
 	d.StatusMessage = "Running finalization commands"
 	if ok := d.handleCommandTemplates(p.TemplatesAfter, p); !ok {
+		if notifier != nil {
+			notifier.DeploymentFailed(d)
+		}
 		return
 	}
 
@@ -87,7 +99,13 @@ func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, tem
 
 	for i := 0; i < len(p.Templates); i++ {
 		if p.Templates[i].Src == templateName {
-			d.handleTemplate(&p.Templates[i], p, notifier)
+			if ok := d.handleTemplate(&p.Templates[i], p, notifier); !ok {
+				if notifier != nil {
+					notifier.DeploymentFailed(d)
+				}
+				return
+			}
+			break
 		}
 	}
 
@@ -137,18 +155,8 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 		for i := 0; i < len(p.Templates); i++ {
 			if p.Templates[i].Src+".tpl" == tmplIdx {
 				if p.Templates[i].Watch != "" {
-					watch, _ := p.ProcessedTemplates.handle(p.Templates[i].Watch, &d.Variables)
-					log.Info.Printf("Starting watch for template %s on key %s", tmplIdx, watch)
-					// TODO we should maintain an internal list of watches, and the associated
-					// meta data so we don't end up with multiple watches for the same thing
-					notifier.Watch(watch, func(value string) {
-						out, _ := p.ProcessedTemplates.handle(tmplIdx, &d.Variables)
-						log.Trace.Printf("Writing to file %s", dest)
-						d1 := []byte(out)
-						// TODO handle permissions correctly
-						ioutil.WriteFile(dest, d1, p.Templates[i].fileMode)
-						os.Chown(dest, p.Templates[i].uid, p.Templates[i].gid)
-					})
+
+					d.handleWatch(p, &p.Templates[i], notifier, dest)
 
 				}
 				break
@@ -156,6 +164,25 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 		}
 	}
 	return val, true
+}
+
+func (d *Deployment) handleWatch(p *Package, tmp *Template, notifier DeploymentNotifier, dest string) {
+	watch, _ := p.ProcessedTemplates.handle(tmp.Watch, &d.Variables)
+	log.Info.Printf("Starting watch for template %s on key %s", tmp.Src+".tpl", watch)
+	// TODO we should maintain an internal list of watches, and the associated
+	// meta data so we don't end up with multiple watches for the same thing
+	notifier.Watch(watch, func(value string) {
+		out, _ := p.ProcessedTemplates.handle(tmp.Src+".tpl", &d.Variables)
+		d.handleWrite(tmp, dest, out)
+	})
+}
+
+func (d *Deployment) handleWrite(tmp *Template, dest string, output string) error {
+	log.Trace.Printf("Writing to file %s", dest)
+	d1 := []byte(output)
+	err := ioutil.WriteFile(dest, d1, os.FileMode(tmp.fileMode))
+	os.Chown(dest, tmp.uid, tmp.gid)
+	return err
 }
 
 func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier) bool {
@@ -187,10 +214,7 @@ func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier Deployme
 	if output, ok = d.handleTemplateFile(id+".tpl", p, notifier, dest); !ok {
 		return false
 	}
-	log.Trace.Printf("Writing to file %s", dest)
-	d1 := []byte(output)
-	err := ioutil.WriteFile(dest, d1, os.FileMode(tmp.fileMode))
-	os.Chown(dest, tmp.uid, tmp.gid)
+	err := d.handleWrite(tmp, dest, output)
 	if err != nil {
 		log.Info.Printf("Deployment for package %s failed to complete. Could not write file: %s - %v", p.Id, dest, err)
 		d.StatusMessage = fmt.Sprintf("Deployment %s of package %s failed: %v", d.Id, d.PackageId, err)

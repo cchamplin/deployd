@@ -30,10 +30,11 @@ import (
 )
 
 type ServerConfiguration struct {
-	Addr          string   `json:"bind-addr"`
-	Port          int      `json:"bind-port"`
-	AllowedTags   []string `json:"allowed-tags"`
-	AllowUntagged bool     `json:"allow-untagged"`
+	Addr          string                 `json:"bind-addr"`
+	Port          int                    `json:"bind-port"`
+	AllowedTags   []string               `json:"allowed-tags"`
+	AllowUntagged bool                   `json:"allow-untagged"`
+	Journal       map[string]interface{} `json:"journal"`
 }
 
 // Load the configuration file

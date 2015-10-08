@@ -40,17 +40,19 @@ var repo *deployment.Repository
 var clstr cluster.Cluster
 
 func main() {
-	// Todo refactor this, probably split it out into a separate file
+	// TODO refactor this, probably split it out into a separate file
+	// TODO handle environment variables for alternative mechanism to set flags
 	var configFlag = flag.String("config", "/etc/deployd", "Directory for deployd to search for packages.json in")
-	var dFlag = flag.Bool("d", false, "--d Display infor and warning messages during runtime")
-	var debugFlag = flag.Bool("debug", false, "-Display info and warning messages during runtime")
-	var verboseFlag = flag.Bool("verbose", false, "Display all available output during runtime")
+	var dFlag = flag.Bool("d", false, "Display all available output during runtime")
+	var debugFlag = flag.Bool("debug", false, "Display all available output during runtime")
+	var verboseFlag = flag.Bool("verbose", false, "Display info and warning messages during runtime")
 	var clusterFlag = flag.Bool("nocluster", false, "Set true to disable clustering")
+	var journalFlag = flag.Bool("nojournal", false, "Set true to disable journaling")
 	flag.Parse()
 
-	if *verboseFlag {
+	if *dFlag || *debugFlag {
 		log.InitLogger(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
-	} else if *dFlag || *debugFlag {
+	} else if *verboseFlag {
 		log.InitLogger(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	} else {
 		log.InitLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, os.Stderr)
@@ -60,7 +62,9 @@ func main() {
 	if config == nil {
 		golog.Fatal("deployd cannot be started without proper configuration")
 	}
+
 	log.Info.Printf("Starting... %s", config.Addr+":"+strconv.Itoa(config.Port))
+
 	// This whole setup has code smell...
 	// TODO refactor this
 	if !*clusterFlag {
@@ -73,7 +77,14 @@ func main() {
 	// Initialize repo
 	repo = new(deployment.Repository)
 	var funcMap = GoTemplate.FuncMap{"getv": clstr.Backend.GetValue, "getvs": clstr.Backend.GetValues, "gets": clstr.Backend.GetString}
-	repo.Init(*configFlag, config.AllowUntagged, config.AllowedTags, funcMap, clstr.Backend)
+
+	var journal log.Journal
+	if !*journalFlag {
+		log.Info.Printf("Starting with journaling")
+		journal = log.JournalFromConfig(config.Journal)
+	}
+
+	repo.Init(*configFlag, config.AllowUntagged, config.AllowedTags, journal, funcMap, clstr.Backend)
 
 	// Intialize the router
 	router := NewRouter()

@@ -13,13 +13,13 @@
       {
         "src" : "activator.socket",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
-        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [1]"
       },
       {
         "src" : "activator.service",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
-        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [2]"
       },
       {
@@ -44,20 +44,15 @@
     ],
     "templates" : [
       {
-        "src" : "authorized_keys",
-        "dest" : "/tmp/deployd/authorized_keys",
-        "description" : "Initializing Services [0]"
-      },
-      {
         "src" : "activator.socket",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
-        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [1]"
       },
       {
         "src" : "activator.service",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
-        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [2]"
       },
       {
@@ -81,20 +76,15 @@
     ],
     "templates" : [
       {
-        "src" : "authorized_keys",
-        "dest" : "/tmp/deployd/authorized_keys",
-        "description" : "Initializing Services [0]"
-      },
-      {
         "src" : "activator.socket",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
-        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [1]"
       },
       {
         "src" : "activator.service",
         "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
-        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [2]"
       },
       {

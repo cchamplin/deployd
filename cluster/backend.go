@@ -29,6 +29,7 @@ import (
 type Backend interface {
 	Init(c *Cluster, machine *Machine)
 	DeploymentComplete(d *deployment.Deployment)
+	DeploymentFailed(d *deployment.Deployment)
 	GetValue(key string) map[string]interface{}
 	GetString(key string) string
 	GetValues(key string) map[string]interface{}

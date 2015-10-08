@@ -37,26 +37,43 @@ import (
 )
 
 type Repository struct {
-	DeploymentNotifier DeploymentNotifier
+	deploymentNotifier DeploymentNotifier
 	packages           Packages
 	deployments        Deployments
 	mutex              *sync.Mutex
 	configDirectory    string
+	journalBackend     log.Journal
 }
 
 // Give us some seed data
 // The notifier is used for the storage backend, I'm not happy with this
 // design, it'll need to be refactored
-func (r *Repository) Init(configDir string, allowUntagged bool, tags []string, funcMap GoTemplate.FuncMap, notifier DeploymentNotifier) {
+func (r *Repository) Init(configDir string, allowUntagged bool, tags []string, journalBackend log.Journal, funcMap GoTemplate.FuncMap, notifier DeploymentNotifier) {
 	log.Trace.Printf("Initializing")
-	r.DeploymentNotifier = notifier
+	r.deploymentNotifier = notifier
 	r.mutex = &sync.Mutex{}
 	r.configDirectory = configDir
-
+	r.journalBackend = journalBackend
 	// Load the package definitions from the config directory
 	r.LoadPackages(funcMap)
 
 	r.deployments = make(map[string]*Deployment)
+
+	if r.journalBackend != nil {
+		r.LoadJournaledDeployments()
+	}
+
+}
+
+func (r Repository) DeploymentComplete(d *Deployment) {
+	r.JournalDeployment(d)
+	r.deploymentNotifier.DeploymentComplete(d)
+}
+func (r Repository) DeploymentFailed(d *Deployment) {
+	r.JournalDeployment(d)
+}
+func (r Repository) Watch(key string, callback func(string)) {
+	r.deploymentNotifier.Watch(key, callback)
 }
 
 func (r *Repository) Packages() Packages {
@@ -95,6 +112,82 @@ func (r *Repository) AddDeployment(d *Deployment) {
 	r.mutex.Lock()
 	r.deployments[d.Id] = d
 	r.mutex.Unlock()
+}
+
+func (r *Repository) JournalDeployment(d *Deployment) {
+	if r.journalBackend != nil {
+
+		go func() {
+			// TODO decide how to act when a journal write fails
+			ok := r.journalBackend.WriteEntry(d)
+			if !ok {
+				log.Error.Printf("Failed to write entry to journal")
+			}
+		}()
+	} else {
+		log.Trace.Printf("No journal backend loaded")
+	}
+}
+
+func (r *Repository) LoadJournaledDeployments() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	entries := r.journalBackend.ReadEntries(func() interface{} {
+		return &Deployment{}
+	})
+	for _, entry := range entries {
+		d := entry.(*Deployment)
+		r.deployments[d.Id] = d
+		if d.Watch {
+			if d.Template != "" {
+				pkg, _ := r.FindPackage(d.PackageId)
+				for _, tmpl := range pkg.Templates {
+					if tmpl.Src == d.Template && tmpl.Watch != "" {
+						var dest string
+						dest, ok := d.handleTemplateFile(tmpl.Src+"_dest", &pkg, nil, "")
+						if !ok {
+							log.Warning.Printf("Could not resume watch for deployment %s", d.Id)
+							continue
+						}
+						d.handleWatch(&pkg, &tmpl, r, dest)
+						break
+					}
+				}
+			} else {
+				// TODO The error from FindPackage() should be handleNewNode
+				// decide what should happen if the package is no longer loaded
+				pkg, _ := r.FindPackage(d.PackageId)
+				for _, tmpl := range pkg.Templates {
+					if tmpl.Watch != "" {
+						var dest string
+						dest, ok := d.handleTemplateFile(tmpl.Src+"_dest", &pkg, nil, "")
+						if !ok {
+							log.Warning.Printf("Could not resume watch for deployment %s", d.Id)
+							continue
+						}
+						d.handleWatch(&pkg, &tmpl, r, dest)
+					}
+				}
+			}
+		}
+	}
+	log.Info.Printf("Read %d journaled deployments", len(r.deployments))
+	redeploys := 0
+	for _, d := range r.deployments {
+		if d.Status != "COMPLETE" {
+			redeploys += 1
+			if d.Template == "" {
+				pkg, _ := r.FindPackage(d.PackageId)
+				pkg.ReDeployPackage(r, d)
+			} else {
+				pkg, _ := r.FindPackage(d.PackageId)
+				pkg.ReDeployPackageTemplate(r, d)
+			}
+		}
+	}
+	if redeploys > 0 {
+		log.Info.Printf("Redeployed %d journaled deployments", redeploys)
+	}
 }
 
 func (r *Repository) LoadPackages(funcMap GoTemplate.FuncMap) {
@@ -183,7 +276,12 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 			if tmp.Watch != "" {
 				tPkgs[idx].processTemplate(tmp.Watch, tmp.Watch, funcMap)
 			}
-			tPkgs[idx].processTemplateFile(r.configDirectory, tmp.Src+".tpl", tmp.Src+".tpl", funcMap)
+			err := tPkgs[idx].processTemplateFile(r.configDirectory, tmp.Src+".tpl", tmp.Src+".tpl", funcMap)
+			if err != nil {
+				// TODO this isn't enough, we need to remove the package from the list
+				log.Warning.Printf("Template file could not be processed: %s in package %s", tmp.Src, tPkgs[idx].Id)
+				goto nextPackage
+			}
 
 			// TODO evaluate if these need to be command lists and if there
 			// is such a use case
@@ -195,6 +293,7 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 		for _, cmd := range tPkgs[idx].TemplatesAfter {
 			tPkgs[idx].processTemplate(cmd, cmd, funcMap)
 		}
+	nextPackage:
 	}
 	// Compose the package list
 	// TODO figure out how to handle duplicate package ids

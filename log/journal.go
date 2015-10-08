@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,9 +26,19 @@ type FileJournal struct {
 	BackupInterval int64
 	BackupOnWrite  bool
 	MaxBackups     int64
+	mutex          *sync.Mutex
 }
 
-func (j *FileJournal) WriteEntry(entry interface{}) bool {
+func (j FileJournal) WriteEntry(entry interface{}) bool {
+
+	// TODO is this a race condition?
+	if j.mutex == nil {
+		j.mutex = &sync.Mutex{}
+	}
+
+	j.mutex.Lock()
+	defer j.mutex.Unlock()
+
 	data, err := json.Marshal(entry)
 	//Prepend with data length
 	dlen := len(data)
@@ -40,6 +52,7 @@ func (j *FileJournal) WriteEntry(entry interface{}) bool {
 	}
 	var f *os.File
 	filename := j.FilePath + "deployd.j001"
+	Trace.Printf("Writing journal entry to %s %v", filename, j)
 	if _, err := os.Stat(filename); !os.IsNotExist(err) {
 		if j.BackupOnWrite || (j.BackupInterval > 0 && time.Now().Unix()-j.LastBackup >= j.BackupInterval) {
 			j.rotateBackups()
@@ -79,7 +92,7 @@ func (j *FileJournal) WriteEntry(entry interface{}) bool {
 	return true
 }
 
-func (j *FileJournal) ReadEntries(marshalFactory func() interface{}) (entries interface{}) {
+func (j FileJournal) ReadEntries(marshalFactory func() interface{}) (entries []interface{}) {
 	filename := j.FilePath + "deployd.j001"
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0000)
 	defer f.Close()
@@ -176,4 +189,66 @@ func fileCopyData(original, backup string) (err error) {
 	}
 	err = b.Sync()
 	return
+}
+
+func JournalFromConfig(config map[string]interface{}) Journal {
+	t, ok := config["type"]
+	var journalType string
+	if !ok {
+		journalType = "file"
+	} else {
+		journalType = t.(string)
+	}
+
+	var j Journal
+	switch strings.ToLower(journalType) {
+	case "file":
+		fj := FileJournal{mutex: &sync.Mutex{}}
+		configureFileJournal(&fj, config)
+		j = fj
+	}
+
+	return j
+}
+
+func configureFileJournal(j *FileJournal, config map[string]interface{}) {
+	j.FSyncOnWrite = false
+	j.FSyncInterval = 300
+	j.BackupOnWrite = false
+	j.BackupInterval = 3600
+	j.FilePath = "/var/lib/deployd/"
+	j.MaxBackups = 10
+	for key, val := range config {
+		switch strings.ToLower(key) {
+		case "filepath":
+			// TODO ensure filepath ends with a slash
+			j.FilePath = val.(string)
+		case "sync-on-write":
+			j.FSyncOnWrite = val.(bool)
+		case "sync-interval":
+		case "backup-on-write":
+			j.BackupOnWrite = val.(bool)
+		case "backup-interval":
+			j.BackupInterval = int64(val.(int))
+		case "max-backups":
+			j.BackupInterval = int64(val.(int))
+		}
+	}
+	d, err := os.Stat(j.FilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			Warning.Printf("Journal directory does not exist: %s", j.FilePath)
+			err := os.Mkdir(j.FilePath, 0600)
+			if err != nil {
+				Error.Printf("Journal directory does not exist and could not be created %v", err)
+			}
+		} else {
+			Error.Printf("Error reading journal directory %v", err)
+		}
+	} else {
+		if !d.IsDir() {
+			Error.Printf("Journal filepath is not a directory: %s", j.FilePath)
+		}
+	}
+	Trace.Printf("Loaded Journal Config: %v", j)
 }

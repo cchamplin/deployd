@@ -4,28 +4,28 @@
     "version" : "0.1",
     "id" : "php-dev",
     "template_before" : [
-      "mkdir /opt",
-      "mkdir /opt/containers",
-      "mkdir /opt/containers/{{.service_id}}",
-      "mkdir /opt/containers/{{.service_id}}/run",
-      "mkdir /opt/containers/{{.service_id}}/www"
+      "mkdir /tmp",
+      "mkdir /tmp/deployd",
+      "mkdir /tmp/deployd/{{.service_id}}",
+      "mkdir /tmp/deployd/{{.service_id}}/run",
+      "mkdir /tmp/deployd/{{.service_id}}/www"
     ],
     "templates" : [
       {
         "src" : "activator.socket",
-        "dest" : "/etc/systemd/system/{{.service_id}}_activator.socket",
-        "after" : "systemctl enable {{.service_id}}_activator.socket",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.socket",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [1]"
       },
       {
         "src" : "activator.service",
-        "dest" : "/etc/systemd/system/{{.service_id}}_activator.service",
-        "after" : "systemctl start {{.service_id}}_activator.socket",
+        "dest" : "/tmp/deployd/{{.service_id}}_activator.service",
+        "after" : "echo \"Command Complete\"",
         "description" : "Initializing Services [2]"
       },
       {
         "src" : "php.service",
-        "dest" : "/etc/systemd/system/{{.service_id}}_php.service",
+        "dest" : "echo \"Command Complete\"",
         "description" : "Initializing Services [3]"
       }
     ],
