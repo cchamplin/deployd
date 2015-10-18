@@ -32,19 +32,31 @@ import (
 
 type GoTemplateList map[string]*GoTemplate.Template
 
+type PackageDef struct {
+	Id              string        `json:"id"`
+	Tag             string        `json:"tag"`
+	Name            string        `json:"name"`
+	Version         string        `json:"version"`
+	Strict          bool          `json:"strict"`
+	Templates       []TemplateDef `json:"templates"`
+	TemplatesBefore []interface{} `json:"template_before"`
+	TemplatesAfter  []interface{} `json:"template_after"`
+}
+
 type Package struct {
-	Id                 string     `json:"id"`
-	Tag                string     `json:"tag"`
-	Name               string     `json:"name"`
-	Version            string     `json:"version"`
-	Strict             bool       `json:"strict"`
-	Templates          []Template `json:"templates"`
-	TemplatesBefore    []string   `json:"template_before"`
-	TemplatesAfter     []string   `json:"template_after"`
+	Id                 string             `json:"id"`
+	Tag                string             `json:"tag"`
+	Name               string             `json:"name"`
+	Version            string             `json:"version"`
+	Strict             bool               `json:"strict"`
+	Templates          []*Template        `json:"templates"`
+	TemplatesBefore    ExecutionFragments `json:"template_before"`
+	TemplatesAfter     ExecutionFragments `json:"template_after"`
 	ProcessedTemplates GoTemplateList
 }
 
 type Packages []Package
+type PackageDefs []PackageDef
 
 // Callback from REST handler
 func (p *Package) DeployPackage(r *Repository, replacements map[string]string, watch bool) *Deployment {

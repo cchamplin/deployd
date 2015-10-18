@@ -26,6 +26,7 @@ import (
 	"../log"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -142,14 +143,14 @@ func (r *Repository) LoadJournaledDeployments() {
 			if d.Template != "" {
 				pkg, _ := r.FindPackage(d.PackageId)
 				for _, tmpl := range pkg.Templates {
-					if tmpl.Src == d.Template && tmpl.Watch != "" {
+					if tmpl.Src == d.Template && len(tmpl.Watch) > 0 {
 						var dest string
 						dest, ok := d.handleTemplateFile(tmpl.Src+"_dest", &pkg, nil, "")
 						if !ok {
 							log.Warning.Printf("Could not resume watch for deployment %s", d.Id)
 							continue
 						}
-						d.handleWatch(&pkg, &tmpl, r, dest)
+						d.handleWatches(&pkg, tmpl, r, dest)
 						break
 					}
 				}
@@ -158,14 +159,14 @@ func (r *Repository) LoadJournaledDeployments() {
 				// decide what should happen if the package is no longer loaded
 				pkg, _ := r.FindPackage(d.PackageId)
 				for _, tmpl := range pkg.Templates {
-					if tmpl.Watch != "" {
+					if len(tmpl.Watch) > 0 {
 						var dest string
 						dest, ok := d.handleTemplateFile(tmpl.Src+"_dest", &pkg, nil, "")
 						if !ok {
 							log.Warning.Printf("Could not resume watch for deployment %s", d.Id)
 							continue
 						}
-						d.handleWatch(&pkg, &tmpl, r, dest)
+						d.handleWatches(&pkg, tmpl, r, dest)
 					}
 				}
 			}
@@ -224,36 +225,74 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 	}
 
 	// Deserialize the data
-	var tPkgs Packages
-	err = json.Unmarshal([]byte(data), &tPkgs)
+	var tDefs PackageDefs
+	err = json.Unmarshal([]byte(data), &tDefs)
 	if err != nil {
 		log.Warning.Printf("Failed to parse json file %s: %v", file, err)
 		return false
 	}
 
-	log.Trace.Printf("Parsed %d packages from file %s", len(tPkgs), file)
-	for idx, _ := range tPkgs {
+	log.Trace.Printf("Parsed %d packages from file %s", len(tDefs), file)
+	var tPkgs Packages
+	tPkgs = make([]Package, len(tDefs))
+	for idx, _ := range tDefs {
+		tPkgs[idx] = Package{}
+		tPkgs[idx].Id = tDefs[idx].Id
+		tPkgs[idx].Tag = tDefs[idx].Tag
+		tPkgs[idx].Name = tDefs[idx].Name
+		tPkgs[idx].Version = tDefs[idx].Version
+		tPkgs[idx].Strict = tDefs[idx].Strict
 
 		if tPkgs[idx].ProcessedTemplates == nil {
 			tPkgs[idx].ProcessedTemplates = make(map[string]*GoTemplate.Template)
 		}
 
 		// Shell commands to be executed before templating takes place
-		for _, cmd := range tPkgs[idx].TemplatesBefore {
-			tPkgs[idx].processTemplate(cmd, cmd, funcMap)
+		tPkgs[idx].TemplatesBefore = make([]*ExecutionFragment, len(tDefs[idx].TemplatesBefore))
+		for fidx, fragmentDef := range tDefs[idx].TemplatesBefore {
+			fragment, ok := r.loadFragment(tPkgs[idx], len(tDefs[idx].TemplatesBefore), fidx+1, fragmentDef, funcMap)
+			if !ok {
+				log.Warning.Printf("Invalid fragment definition %s", file)
+				goto nextPackage
+			}
+			tPkgs[idx].TemplatesBefore[fidx] = fragment
 		}
 
 		// Loop through all of the templates and process them in turn
-		for _, tmp := range tPkgs[idx].Templates {
+		tPkgs[idx].Templates = make([]*Template, len(tDefs[idx].Templates))
+		for tidx, tmpDef := range tDefs[idx].Templates {
+			var tmp *Template = &Template{}
+			tmp.Src = tmpDef.Src
+			tmp.Dest = tmpDef.Dest
+			tmp.Description = tmpDef.Description
+			tmp.Contents = tmpDef.Contents
+
+			tmp.Owner = tmpDef.Owner
+			tmp.Group = tmpDef.Group
+			tmp.Mode = tmpDef.Mode
+			tPkgs[idx].Templates[tidx] = tmp
+
+			if watch, ok := tmpDef.Watch.(string); ok {
+				tmp.Watch = make([]string, 1)
+				tmp.Watch[0] = watch
+			} else if watchList, ok := tmpDef.Watch.([]interface{}); ok {
+				tmp.Watch = make([]string, len(watchList))
+				for widx, watchDef := range watchList {
+					if watch, ok := watchDef.(string); ok {
+						tmp.Watch[widx] = watch
+					}
+				}
+			}
+
 			//tmpl := GoTemplate.Must(GoTemplate.New(tmp.Src + "_src").Parse(tmp.Src))
 			//packages[idx].ProcessedTemplates[tmp.Src+"_src"] = tmpl
-			if tmp.Mode == "" {
+			if tmpDef.Mode == "" {
 				tmp.fileMode = 0644
 			}
-			if tmp.Owner == "" {
+			if tmpDef.Owner == "" {
 				tmp.uid = os.Geteuid()
 			} else {
-				if u, err := user.Lookup(tmp.Owner); err == nil {
+				if u, err := user.Lookup(tmpDef.Owner); err == nil {
 					if tmp.uid, err = strconv.Atoi(u.Uid); err != nil {
 						tmp.uid = os.Geteuid()
 					}
@@ -261,7 +300,7 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 					tmp.uid = os.Geteuid()
 				}
 			}
-			if tmp.Group == "" {
+			if tmpDef.Group == "" {
 				tmp.gid = os.Getgid()
 			} else {
 				// Right now we don't have a way to get a gid
@@ -269,29 +308,92 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 				// See: https://github.com/golang/go/issues/2617
 				tmp.gid = os.Getgid()
 			}
-			log.Trace.Printf("Processing Template: %s", tmp.Src)
+			log.Trace.Printf("Processing Template: %s", tmpDef.Src)
 			// Most parts of the template definition (destination,template it self,
 			// commands)
-			tPkgs[idx].processTemplate(tmp.Src+"_dest", tmp.Dest, funcMap)
-			if tmp.Watch != "" {
-				tPkgs[idx].processTemplate(tmp.Watch, tmp.Watch, funcMap)
+			tPkgs[idx].processTemplate(tmpDef.Src+"_dest", tmpDef.Dest, funcMap)
+			if len(tmp.Watch) > 0 {
+				for _, twatch := range tmp.Watch {
+					tPkgs[idx].processTemplate(twatch, twatch, funcMap)
+				}
 			}
-			err := tPkgs[idx].processTemplateFile(r.configDirectory, tmp.Src+".tpl", tmp.Src+".tpl", funcMap)
+			err := tPkgs[idx].processTemplateFile(r.configDirectory, tmpDef.Src+".tpl", tmpDef.Src+".tpl", funcMap)
 			if err != nil {
 				// TODO this isn't enough, we need to remove the package from the list
-				log.Warning.Printf("Template file could not be processed: %s in package %s", tmp.Src, tPkgs[idx].Id)
+				log.Warning.Printf("Template file could not be processed: %s in package %s", tmpDef.Src, tPkgs[idx].Id)
 				goto nextPackage
 			}
 
-			// TODO evaluate if these need to be command lists and if there
-			// is such a use case
-			tPkgs[idx].processTemplate(tmp.Src+"_before", tmp.Before, funcMap)
-			tPkgs[idx].processTemplate(tmp.Src+"_after", tmp.After, funcMap)
+			// TODO L2Method
+			if fragment, ok := tmpDef.Before.(string); ok {
+				tmp.Before = make([]*ExecutionFragment, 1)
+				fragment, ok := r.loadFragment(tPkgs[idx], 1, 1, fragment, funcMap)
+				if !ok {
+					log.Warning.Printf("Invalid fragment definition %s", file)
+					goto nextPackage
+				}
+				tmp.Before[0] = fragment
+			} else if fragmentDefs, ok := tmpDef.Before.([]interface{}); ok {
+				for fidx, def := range fragmentDefs {
+					tmp.Before = make([]*ExecutionFragment, len(fragmentDefs))
+					fragment, ok := r.loadFragment(tPkgs[idx], len(fragmentDefs), fidx+1, def, funcMap)
+					if !ok {
+						log.Warning.Printf("Invalid fragment definition %s", file)
+						goto nextPackage
+					}
+					tmp.Before[fidx] = fragment
+				}
+			} else if fragment, ok := tmpDef.Before.(ExecutionFragment); ok {
+				tmp.Before = make([]*ExecutionFragment, 1)
+				fragment, ok := r.loadFragment(tPkgs[idx], 1, 1, fragment, funcMap)
+				if !ok {
+					log.Warning.Printf("Invalid fragment definition %s", file)
+					goto nextPackage
+				}
+				tmp.Before[0] = fragment
+			}
+
+			if fragment, ok := tmpDef.After.(string); ok {
+				tmp.After = make([]*ExecutionFragment, 1)
+				fragment, ok := r.loadFragment(tPkgs[idx], 1, 1, fragment, funcMap)
+				if !ok {
+					log.Warning.Printf("Invalid fragment definition %s", file)
+					goto nextPackage
+				}
+				tmp.After[0] = fragment
+			} else if fragmentDefs, ok := tmpDef.After.([]interface{}); ok {
+				for fidx, def := range fragmentDefs {
+					tmp.After = make([]*ExecutionFragment, len(fragmentDefs))
+					fragment, ok := r.loadFragment(tPkgs[idx], len(fragmentDefs), fidx+1, def, funcMap)
+					if !ok {
+						log.Warning.Printf("Invalid fragment definition %s", file)
+						goto nextPackage
+					}
+					tmp.After[fidx] = fragment
+				}
+			} else if fragment, ok := tmpDef.After.(ExecutionFragment); ok {
+				tmp.After = make([]*ExecutionFragment, 1)
+				fragment, ok := r.loadFragment(tPkgs[idx], 1, 1, fragment, funcMap)
+				if !ok {
+					log.Warning.Printf("Invalid fragment definition %s", file)
+					goto nextPackage
+				}
+				tmp.After[0] = fragment
+			}
+
+			//tPkgs[idx].processTemplate(tmpDef.Src+"_before", tmpDef.Before, funcMap)
+			//tPkgs[idx].processTemplate(tmpDef.Src+"_after", tmpDef.After, funcMap)
 		}
 
 		// Shell commands to be executed after templating takes place
-		for _, cmd := range tPkgs[idx].TemplatesAfter {
-			tPkgs[idx].processTemplate(cmd, cmd, funcMap)
+		tPkgs[idx].TemplatesAfter = make([]*ExecutionFragment, len(tDefs[idx].TemplatesAfter))
+		for fidx, fragmentDef := range tDefs[idx].TemplatesAfter {
+			fragment, ok := r.loadFragment(tPkgs[idx], len(tDefs[idx].TemplatesAfter), fidx, fragmentDef, funcMap)
+			if !ok {
+				log.Warning.Printf("Invalid fragment definition %s", file)
+				goto nextPackage
+			}
+			tPkgs[idx].TemplatesAfter[fidx] = fragment
 		}
 	nextPackage:
 	}
@@ -299,4 +401,36 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 	// TODO figure out how to handle duplicate package ids
 	r.packages = append(r.packages, tPkgs...)
 	return true
+}
+
+func (r *Repository) loadFragment(pkg Package, count int, fidx int, fragmentDef interface{}, funcMap GoTemplate.FuncMap) (*ExecutionFragment, bool) {
+	var fragment *ExecutionFragment
+	if cmd, ok := fragmentDef.(string); ok {
+		fragment = &ExecutionFragment{}
+		fragment.Cmd = cmd
+		fragment.Status = fmt.Sprintf("Command: %d of %d", fidx, count)
+	} else {
+		if def, ok := fragmentDef.(map[string]interface{}); ok {
+			fragment, ok = MakeExecutionFragment(def)
+			if !ok {
+				return nil, false
+			}
+			if fragment.StatusCmd != "" {
+				pkg.processTemplate(fragment.StatusCmd, fragment.StatusCmd, funcMap)
+			} else {
+				fragment.Status = fmt.Sprintf("Command: %d of %d", fidx, count)
+			}
+		} else {
+			return nil, false
+		}
+	}
+
+	if fragment.CheckCmd != "" {
+		pkg.processTemplate(fragment.CheckCmd, fragment.CheckCmd, funcMap)
+	}
+	if fragment.ValidateCmd != "" {
+		pkg.processTemplate(fragment.ValidateCmd, fragment.ValidateCmd, funcMap)
+	}
+	pkg.processTemplate(fragment.Cmd, fragment.Cmd, funcMap)
+	return fragment, true
 }

@@ -26,17 +26,30 @@ import (
 	"os"
 )
 
+type TemplateDef struct {
+	Src         string      `json:"src"`
+	Dest        string      `json:"dest"`
+	Description string      `json:"description"`
+	Before      interface{} `json:"before"`
+	After       interface{} `json:"after"`
+	Contents    string      `json:"contents"`
+	Watch       interface{} `json:"watch"`
+	Owner       string      `json:"owner"`
+	Group       string      `json:"group"`
+	Mode        string      `json:"mode"`
+}
+
 type Template struct {
-	Src         string `json:"src"`
-	Dest        string `json:"dest"`
-	Description string `json:"description"`
-	Before      string `json:"before"`
-	After       string `json:"after"`
-	Contents    string `json:"contents"`
-	Watch       string `json:"watch"`
-	Owner       string `json:"watch"`
-	Group       string `json:"group"`
-	Mode        string `json:"mode"`
+	Src         string             `json:"src"`
+	Dest        string             `json:"dest"`
+	Description string             `json:"description"`
+	Before      ExecutionFragments `json:"before"`
+	After       ExecutionFragments `json:"after"`
+	Contents    string             `json:"contents"`
+	Watch       []string           `json:"watch"`
+	Owner       string             `json:"owner"`
+	Group       string             `json:"group"`
+	Mode        string             `json:"mode"`
 	fileMode    os.FileMode
 	uid         int
 	gid         int

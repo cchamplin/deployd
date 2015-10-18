@@ -24,6 +24,7 @@ package deployment
 
 import (
 	"../log"
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -65,7 +66,7 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 
 	d.StatusMessage = "Running initialization commands"
 	d.Status = STATUS_WORKING
-	if ok := d.handleCommandTemplates(p.TemplatesBefore, p); !ok {
+	if ok := d.handleExecutionFragments(p.TemplatesBefore, p); !ok {
 		if notifier != nil {
 			notifier.DeploymentFailed(d)
 		}
@@ -80,7 +81,7 @@ func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 	}
 
 	d.StatusMessage = "Running finalization commands"
-	if ok := d.handleCommandTemplates(p.TemplatesAfter, p); !ok {
+	if ok := d.handleExecutionFragments(p.TemplatesAfter, p); !ok {
 		if notifier != nil {
 			notifier.DeploymentFailed(d)
 		}
@@ -99,7 +100,7 @@ func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, tem
 
 	for i := 0; i < len(p.Templates); i++ {
 		if p.Templates[i].Src == templateName {
-			if ok := d.handleTemplate(&p.Templates[i], p, notifier); !ok {
+			if ok := d.handleTemplate(p.Templates[i], p, notifier); !ok {
 				if notifier != nil {
 					notifier.DeploymentFailed(d)
 				}
@@ -116,31 +117,59 @@ func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, tem
 	}
 }
 
-func (d *Deployment) handleCommandTemplates(templates []string, p *Package) bool {
-	for i := 0; i < len(templates); i++ {
-		cmd := templates[i]
-		d.StatusMessage = fmt.Sprintf("Running command: %d of %d", i, len(templates))
-		if ok := d.handleCommandTemplate(cmd, p); !ok {
-			return false
+func (d *Deployment) handleExecutionFragments(fragments ExecutionFragments, p *Package) bool {
+	for i := 0; i < len(fragments); i++ {
+		fragment := fragments[i]
+
+		// TODO should we fail if the status command fails?
+		if fragment.StatusCmd != "" {
+			if out, err := p.ProcessedTemplates.handle(fragment.StatusCmd, &d.Variables); err != nil {
+				d.StatusMessage = out
+			}
+		} else {
+			d.StatusMessage = fragment.Status
 		}
+		// TODO add functionality for check commands comparing a value against the output of the command
+		if fragment.CheckCmd != "" {
+			_, ok := d.handleCommandTemplate(fragment.CheckCmd, p, true)
+			if ok {
+				if _, ok := d.handleCommandTemplate(fragment.Cmd, p, false); !ok {
+					log.Trace.Printf("Deployment for package %s command failed: %s", d.PackageId, fragment.Cmd)
+					return false
+				}
+			} else {
+			}
+		} else {
+			if _, ok := d.handleCommandTemplate(fragment.Cmd, p, false); !ok {
+				log.Trace.Printf("Deployment for package %s command failed: %s", d.PackageId, fragment.Cmd)
+				return false
+
+			}
+		}
+		// TODO complete implementation for verification commands
+
 	}
 	return true
 }
 
-func (d *Deployment) handleCommandTemplate(tmplIdx string, p *Package) bool {
+func (d *Deployment) handleCommandTemplate(tmplIdx string, p *Package, strict bool) (string, bool) {
 	s, err := p.ProcessedTemplates.handle(tmplIdx, &d.Variables)
 	if err == nil {
-		if ok := exec_cmd(s); !ok && p.Strict {
+		out, ok := exec_cmd(s)
+		if !ok && p.Strict {
 			d.failStrict()
-			return false
+			return out, false
+		} else if !ok && strict {
+			return out, false
 		}
 	} else if p.Strict {
+		// TODO refactor this for execution fragments
 		log.Info.Printf("Deployment for package %s failed to complete: %v", d.PackageId, err)
 		d.StatusMessage = fmt.Sprintf("Deployment %s of package %s failed: %v", d.Id, d.PackageId, err)
 		d.Status = STATUS_FAILED
-		return false
+		return "", false
 	}
-	return true
+	return "", true
 }
 
 func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier DeploymentNotifier, dest string) (string, bool) {
@@ -154,10 +183,8 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 	if d.Watch && notifier != nil {
 		for i := 0; i < len(p.Templates); i++ {
 			if p.Templates[i].Src+".tpl" == tmplIdx {
-				if p.Templates[i].Watch != "" {
-
-					d.handleWatch(p, &p.Templates[i], notifier, dest)
-
+				if len(p.Templates[i].Watch) > 0 {
+					d.handleWatches(p, p.Templates[i], notifier, dest)
 				}
 				break
 			}
@@ -166,15 +193,27 @@ func (d *Deployment) handleTemplateFile(tmplIdx string, p *Package, notifier Dep
 	return val, true
 }
 
-func (d *Deployment) handleWatch(p *Package, tmp *Template, notifier DeploymentNotifier, dest string) {
-	watch, _ := p.ProcessedTemplates.handle(tmp.Watch, &d.Variables)
-	log.Info.Printf("Starting watch for template %s on key %s", tmp.Src+".tpl", watch)
-	// TODO we should maintain an internal list of watches, and the associated
-	// meta data so we don't end up with multiple watches for the same thing
-	notifier.Watch(watch, func(value string) {
-		out, _ := p.ProcessedTemplates.handle(tmp.Src+".tpl", &d.Variables)
-		d.handleWrite(tmp, dest, out)
-	})
+func (d *Deployment) handleWatches(p *Package, tmp *Template, notifier DeploymentNotifier, dest string) {
+	for _, tWatch := range tmp.Watch {
+		watch, _ := p.ProcessedTemplates.handle(tWatch, &d.Variables)
+		log.Info.Printf("Starting watch for template %s on key %s", tmp.Src+".tpl", watch)
+		// TODO we should maintain an internal list of watches, and the associated
+		// meta data so we don't end up with multiple watches for the same thing
+		notifier.Watch(watch, func(value string) {
+			if len(tmp.Before) > 0 {
+				if ok := d.handleExecutionFragments(tmp.Before, p); !ok {
+					return
+				}
+			}
+			out, _ := p.ProcessedTemplates.handle(tmp.Src+".tpl", &d.Variables)
+			d.handleWrite(tmp, dest, out)
+			if len(tmp.After) > 0 {
+				if ok := d.handleExecutionFragments(tmp.After, p); !ok {
+					return
+				}
+			}
+		})
+	}
 }
 
 func (d *Deployment) handleWrite(tmp *Template, dest string, output string) error {
@@ -187,7 +226,7 @@ func (d *Deployment) handleWrite(tmp *Template, dest string, output string) erro
 
 func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier) bool {
 	for i := 0; i < len(p.Templates); i++ {
-		if ok := d.handleTemplate(&p.Templates[i], p, notifier); !ok {
+		if ok := d.handleTemplate(p.Templates[i], p, notifier); !ok {
 			return false
 		}
 	}
@@ -205,8 +244,8 @@ func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier Deployme
 	if !ok {
 		return false
 	}
-	if tmp.Before != "" {
-		if ok := d.handleCommandTemplate(id+"_before", p); !ok {
+	if len(tmp.Before) > 0 {
+		if ok := d.handleExecutionFragments(tmp.Before, p); !ok {
 			return false
 		}
 	}
@@ -221,9 +260,8 @@ func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier Deployme
 		d.Status = STATUS_FAILED
 		return false
 	}
-
-	if tmp.After != "" {
-		if ok := d.handleCommandTemplate(id+"_after", p); !ok {
+	if len(tmp.After) > 0 {
+		if ok := d.handleExecutionFragments(tmp.After, p); !ok {
 			return false
 		}
 	}
@@ -265,18 +303,56 @@ func exec_template(template *GoTemplate.Template, variables *map[string]string) 
 }
 
 // Execute shell command
-func exec_cmd(cmd string) bool {
+func exec_cmd(cmd string) (string, bool) {
 	//parts := strings.Fields(cmd)
 	//	head := parts[0]
 	//	parts = parts[1:len(parts)]
 
 	//out, err := exec.Command(head, parts...).CombinedOutput()
-	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	cmdExec := exec.Command("sh", "-c", cmd)
+
+	cmdReader, err := cmdExec.StdoutPipe()
 	if err != nil {
 		log.Info.Printf("Failed to execute command %s: %v", cmd, err)
-		log.Trace.Printf("Command Text: %s", out)
-		return false
+		return "", false
 	}
-	log.Trace.Printf("Executed command %s: %s", cmd, out)
-	return true
+
+	errReader, err := cmdExec.StderrPipe()
+	if err != nil {
+		log.Info.Printf("Failed to execute command %s: %v", cmd, err)
+		return "", false
+	}
+	var buffer bytes.Buffer
+	scanner := bufio.NewScanner(cmdReader)
+	go func() {
+		for scanner.Scan() {
+			//log.Trace.Printf("Output: %s\n", scanner.Text())
+			buffer.WriteString(scanner.Text())
+		}
+	}()
+
+	errScanner := bufio.NewScanner(errReader)
+	go func() {
+		for errScanner.Scan() {
+			//log.Trace.Printf("Error: %s\n", errScanner.Text())
+			buffer.WriteString(scanner.Text())
+		}
+	}()
+
+	err = cmdExec.Start()
+	if err != nil {
+		log.Info.Printf("Failed to execute command %s: %v", cmd, err)
+		//log.Trace.Printf("Command Text: %s", out)
+		return "", false
+	}
+
+	err = cmdExec.Wait()
+	if err != nil {
+		log.Info.Printf("Failed to execute command %s: %v", cmd, err)
+		//log.Trace.Printf("Command Text: %s", out)
+		return buffer.String(), false
+	}
+
+	log.Trace.Printf("Executed command %s", cmd)
+	return buffer.String(), true
 }
