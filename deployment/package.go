@@ -68,6 +68,9 @@ func (p *Package) DeployPackage(r *Repository, replacements map[string]string, w
 	u1 := uuid.NewV4().String()
 
 	log.Info.Printf("Deploying %s - %s", p.Name, u1)
+	replacements["__package"] = p.Name
+	replacements["__packageId"] = p.Id
+	replacements["__deploymentId"] = u1
 
 	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements, Watch: watch}
 
@@ -116,6 +119,9 @@ func (p *Package) DeployPackageTemplate(r *Repository, templateName string, repl
 	u1 := uuid.NewV4().String()
 
 	log.Info.Printf("Deploying %s - %s:%s", u1, p.Name, templateName)
+	replacements["__package"] = p.Name
+	replacements["__packageId"] = p.Id
+	replacements["__deploymentId"] = u1
 
 	deployment := Deployment{Id: u1, PackageId: p.Id, Status: "NOT STARTED", StatusMessage: "Not Started", Variables: replacements, Watch: watch, Template: templateName}
 
