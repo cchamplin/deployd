@@ -24,6 +24,8 @@ package deployment
 
 import (
 	"os"
+
+	"../metrics"
 )
 
 type TemplateDef struct {
@@ -53,4 +55,5 @@ type Template struct {
 	fileMode    os.FileMode
 	uid         int
 	gid         int
+	metrics     *metrics.Metrics
 }

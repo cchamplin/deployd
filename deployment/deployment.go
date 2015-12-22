@@ -23,7 +23,6 @@
 package deployment
 
 import (
-	"../log"
 	"bufio"
 	"bytes"
 	"errors"
@@ -31,6 +30,8 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+
+	"../log"
 	//"strings"
 	GoTemplate "text/template"
 )
@@ -43,6 +44,7 @@ type Deployment struct {
 	Variables     map[string]string `json:"replacements"`
 	Watch         bool              `json:"watch"`
 	Template      string            `json:"template"`
+	EstComplete   int64             `json:"estComplete"`
 }
 
 const (
@@ -63,9 +65,11 @@ type Deployments map[string]*Deployment
 
 func (d *Deployment) Deploy(p *Package, notifier DeploymentNotifier) {
 	log.Info.Printf("Deploying %s", p.Name)
-
+	metric := p.metrics.StartMeasure()
+	defer p.metrics.StopMeasure(metric)
 	d.StatusMessage = "Running initialization commands"
 	d.Status = STATUS_WORKING
+	d.EstComplete = 0
 	if ok := d.handleExecutionFragments(p.TemplatesBefore, p); !ok {
 		if notifier != nil {
 			notifier.DeploymentFailed(d)
@@ -120,6 +124,7 @@ func (d *Deployment) DeployTemplate(p *Package, notifier DeploymentNotifier, tem
 func (d *Deployment) handleExecutionFragments(fragments ExecutionFragments, p *Package) bool {
 	for i := 0; i < len(fragments); i++ {
 		fragment := fragments[i]
+		metric := fragment.metrics.StartMeasure()
 
 		// TODO should we fail if the status command fails?
 		if fragment.StatusCmd != "" {
@@ -135,6 +140,8 @@ func (d *Deployment) handleExecutionFragments(fragments ExecutionFragments, p *P
 			if ok {
 				if _, ok := d.handleCommandTemplate(fragment.Cmd, p, false); !ok {
 					log.Trace.Printf("Deployment for package %s command failed: %s", d.PackageId, fragment.Cmd)
+					fragment.metrics.StopMeasure(metric)
+					d.EstComplete += fragment.metrics.PercentOfTotal(p.metrics)
 					return false
 				}
 			} else {
@@ -142,13 +149,17 @@ func (d *Deployment) handleExecutionFragments(fragments ExecutionFragments, p *P
 		} else {
 			if _, ok := d.handleCommandTemplate(fragment.Cmd, p, false); !ok {
 				log.Trace.Printf("Deployment for package %s command failed: %s", d.PackageId, fragment.Cmd)
+				fragment.metrics.StopMeasure(metric)
+				d.EstComplete += fragment.metrics.PercentOfTotal(p.metrics)
 				return false
 
 			}
 		}
 		// TODO complete implementation for verification commands
-
+		fragment.metrics.StopMeasure(metric)
+		d.EstComplete += fragment.metrics.PercentOfTotal(p.metrics)
 	}
+
 	return true
 }
 
@@ -235,6 +246,11 @@ func (d *Deployment) handleTemplates(p *Package, notifier DeploymentNotifier) bo
 
 func (d *Deployment) handleTemplate(tmp *Template, p *Package, notifier DeploymentNotifier) bool {
 	id := tmp.Src
+	metric := tmp.metrics.StartMeasure()
+	defer func() {
+		tmp.metrics.StopMeasure(metric)
+		d.EstComplete = tmp.metrics.PercentOfTotal(p.metrics)
+	}()
 	d.StatusMessage = tmp.Description
 	log.Trace.Printf("Running %s for deployment %s of package %s", d.Status, d.Id, d.PackageId)
 

@@ -23,7 +23,6 @@
 package deployment
 
 import (
-	"../log"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +32,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+
+	"../log"
+	"../metrics"
 
 	GoTemplate "text/template"
 )
@@ -217,6 +219,7 @@ func (r *Repository) LoadPackages(funcMap GoTemplate.FuncMap) {
 	}
 }
 
+// TODO l2method
 func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMap) bool {
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
@@ -242,6 +245,8 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 		tPkgs[idx].Name = tDefs[idx].Name
 		tPkgs[idx].Version = tDefs[idx].Version
 		tPkgs[idx].Strict = tDefs[idx].Strict
+		// TODO How to persist metrics data between restarts?
+		tPkgs[idx].metrics = metrics.NewMetrics()
 
 		if tPkgs[idx].ProcessedTemplates == nil {
 			tPkgs[idx].ProcessedTemplates = make(map[string]*GoTemplate.Template)
@@ -270,6 +275,7 @@ func (r *Repository) loadPackagesFromFile(file string, funcMap GoTemplate.FuncMa
 			tmp.Owner = tmpDef.Owner
 			tmp.Group = tmpDef.Group
 			tmp.Mode = tmpDef.Mode
+			tmp.metrics = metrics.NewMetrics()
 			tPkgs[idx].Templates[tidx] = tmp
 
 			if watch, ok := tmpDef.Watch.(string); ok {
@@ -408,6 +414,7 @@ func (r *Repository) loadFragment(pkg Package, count int, fidx int, fragmentDef 
 	if cmd, ok := fragmentDef.(string); ok {
 		fragment = &ExecutionFragment{}
 		fragment.Cmd = cmd
+		fragment.metrics = metrics.NewMetrics()
 		fragment.Status = fmt.Sprintf("Command: %d of %d", fidx, count)
 	} else {
 		if def, ok := fragmentDef.(map[string]interface{}); ok {

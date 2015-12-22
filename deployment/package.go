@@ -23,11 +23,13 @@
 package deployment
 
 import (
-	"../log"
-	"github.com/satori/go.uuid"
 	"os"
 	"path/filepath"
 	GoTemplate "text/template"
+
+	"../log"
+	"../metrics"
+	"github.com/satori/go.uuid"
 )
 
 type GoTemplateList map[string]*GoTemplate.Template
@@ -53,6 +55,7 @@ type Package struct {
 	TemplatesBefore    ExecutionFragments `json:"template_before"`
 	TemplatesAfter     ExecutionFragments `json:"template_after"`
 	ProcessedTemplates GoTemplateList
+	metrics            *metrics.Metrics
 }
 
 type Packages []Package
