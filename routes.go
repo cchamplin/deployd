@@ -28,6 +28,7 @@ type Route struct {
 	Name        string
 	Method      string
 	Pattern     string
+	Permissions string
 	HandlerFunc http.HandlerFunc
 }
 
@@ -38,42 +39,91 @@ var routes = Routes{
 		"Index",
 		"GET",
 		"/",
+		"Index",
 		Index,
 	},
 	Route{
 		"PackageIndex",
 		"GET",
 		"/packages",
+		"List Packages",
 		PackageIndex,
 	},
 	Route{
 		"PackageShow",
 		"GET",
 		"/packages/{packageId}",
+		"Package Info",
 		PackageShow,
 	},
 	Route{
 		"PackageDeploy",
 		"POST",
 		"/packages/{packageId}/deploy",
+		"Deploy Package",
 		PackageDeploy,
 	},
 	Route{
 		"PackageDeployTemplate",
 		"POST",
 		"/packages/{packageId}/deploy/{templateName}",
+		"Deploy Template",
 		PackageDeployTemplate,
 	},
 	Route{
 		"DeploymentIndex",
 		"GET",
 		"/deployments",
+		"List Deployments",
 		DeploymentIndex,
 	},
 	Route{
 		"DeploymentShow",
 		"GET",
 		"/deployments/{deploymentId}",
+		"Deployment Info",
 		DeploymentShow,
+	},
+	Route{
+		"CurrentUser",
+		"GET",
+		"/auth",
+		"Current User",
+		CurrentUser,
+	},
+	Route{
+		"Login",
+		"POST",
+		"/auth",
+		"*",
+		Authenticate,
+	},
+	Route{
+		"UsersIndex",
+		"GET",
+		"/users",
+		"List Users",
+		UserIndex,
+	},
+	Route{
+		"UsersShow",
+		"GET",
+		"/users/{userId}",
+		"User Info",
+		UserShow,
+	},
+	Route{
+		"UserUpdate",
+		"PUT",
+		"/users/{userId}",
+		"User Info",
+		UpdateUser,
+	},
+	Route{
+		"UserCreate",
+		"POST",
+		"/users",
+		"User Info",
+		CreateUser,
 	},
 }
