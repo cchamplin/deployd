@@ -23,12 +23,13 @@
 package main
 
 import (
-	"./log"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
+
+	"./log"
+	"github.com/gorilla/mux"
 )
 
 // TODO Decide what to display here
@@ -122,8 +123,8 @@ func PackageDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 
 		watch := true
-		if val,ok := r.Form["watch"]; ok {
-			watch,_ = strconv.ParseBool(val[0])
+		if val, ok := r.Form["watch"]; ok {
+			watch, _ = strconv.ParseBool(val[0])
 		}
 
 		// Parse out post vairables to be used as deployment template replacements
@@ -171,8 +172,8 @@ func PackageDeployTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		watch := false
-		if val,ok := r.Form["watch"]; ok {
-			watch,_ = strconv.ParseBool(val[0])
+		if val, ok := r.Form["watch"]; ok {
+			watch, _ = strconv.ParseBool(val[0])
 		}
 
 		// Parse out post vairables to be used as deployment template replacements
@@ -183,7 +184,7 @@ func PackageDeployTemplate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		deployment := pkg.DeployPackageTemplate(repo,templateName, items,watch)
+		deployment := pkg.DeployPackageTemplate(repo, templateName, items, watch)
 		if err := json.NewEncoder(w).Encode(deployment); err != nil {
 			log.Error.Printf("Failed to encode deployment %s response details: %v", deployment.Id, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -198,4 +199,22 @@ func PackageDeployTemplate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
+}
+
+func CurrentUser(w http.ResponseWriter, r *http.Request) {
+}
+
+func Authenticate(w http.ResponseWriter, r *http.Request) {
+}
+
+func UserIndex(w http.ResponseWriter, r *http.Request) {
+}
+
+func UserShow(w http.ResponseWriter, r *http.Request) {
+}
+
+func UpdateUser(w http.ResponseWriter, r *http.Request) {
+}
+
+func CreateUser(w http.ResponseWriter, r *http.Request) {
 }
