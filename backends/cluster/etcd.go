@@ -20,20 +20,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package backends
+package cluster
 
 import (
-	"../cluster"
-	"../deployment"
-	"../log"
 	"encoding/json"
-	"github.com/coreos/etcd/client"
-	"golang.org/x/net/context"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"../../cluster"
+	"../../deployment"
+	"../../log"
+	"github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
 )
 
 type EtcdBackend struct {

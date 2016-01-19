@@ -1,6 +1,9 @@
-package backends
+package cluster
 
 import (
+	"os"
+	"testing"
+
 	"../cluster"
 	"../deployment"
 	"../log"
@@ -8,8 +11,6 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
-	"os"
-	"testing"
 )
 
 type TestingMachine struct {

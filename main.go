@@ -23,10 +23,6 @@
 package main
 
 import (
-	"./backends"
-	"./cluster"
-	"./deployment"
-	"./log"
 	"flag"
 	"io/ioutil"
 	golog "log"
@@ -34,6 +30,12 @@ import (
 	"os"
 	"strconv"
 	GoTemplate "text/template"
+
+	backends "./backends/cluster"
+	"./cluster"
+	"./conf"
+	"./deployment"
+	"./log"
 )
 
 var repo *deployment.Repository
@@ -43,6 +45,8 @@ func main() {
 	// TODO refactor this, probably split it out into a separate file
 	// TODO handle environment variables for alternative mechanism to set flags
 	var configFlag = flag.String("config", "/etc/deployd", "Directory for deployd to search for packages.json in")
+	var configFromFlag = flag.String("config-from", "", "Load configuration from backend (-config-from=\"etcd,10.250.250.100:4100,/deployd/config\")")
+	var endpointFlag = flag.String("endpoint", "", "Endpoint for this instance of deployd (-endpoint=10.250.200.12:8200)")
 	var dFlag = flag.Bool("d", false, "Display all available output during runtime")
 	var debugFlag = flag.Bool("debug", false, "Display all available output during runtime")
 	var verboseFlag = flag.Bool("verbose", false, "Display info and warning messages during runtime")
@@ -57,10 +61,17 @@ func main() {
 	} else {
 		log.InitLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, os.Stderr)
 	}
-
-	config := LoadConfiguration(*configFlag)
-	if config == nil {
-		golog.Fatal("deployd cannot be started without proper configuration")
+	var config *conf.ServerConfiguration
+	if configFromFlag != nil && len(*configFromFlag) > 0 {
+		if endpointFlag == nil || len(*endpointFlag) == 0 {
+			golog.Fatal("config-from cannot be used without specifing an endpoint")
+		}
+		config = conf.ConfigurationFromBackend(*configFromFlag)
+	} else {
+		config = conf.LoadConfiguration(*configFlag)
+		if config == nil {
+			golog.Fatal("deployd cannot be started without proper configuration")
+		}
 	}
 
 	log.Info.Printf("Starting... %s", config.Addr+":"+strconv.Itoa(config.Port))
@@ -70,8 +81,11 @@ func main() {
 	if !*clusterFlag {
 		log.Info.Printf("Starting with clustering")
 		var backend = new(backends.EtcdBackend)
-
-		clstr.Init(backend, *configFlag)
+		if configFromFlag != nil && len(*configFromFlag) > 0 {
+			clstr.InitFromConfig(backend, *config)
+		} else {
+			clstr.Init(backend, *configFlag)
+		}
 		backend.Init(&clstr, cluster.LocalMachine(config.Addr+":"+strconv.Itoa(config.Port), config.AllowedTags))
 	}
 	// Initialize repo

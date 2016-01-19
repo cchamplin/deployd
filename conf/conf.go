@@ -20,13 +20,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package conf
 
 import (
-	"./log"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
+
+	"../backends/conf"
+	"../log"
 )
 
 type ServerConfiguration struct {
@@ -35,6 +39,15 @@ type ServerConfiguration struct {
 	AllowedTags   []string               `json:"allowed-tags"`
 	AllowUntagged bool                   `json:"allow-untagged"`
 	Journal       map[string]interface{} `json:"journal"`
+	AuthToken     string                 `json:"auth-token"`
+	Backend       ConfigurationBackend
+}
+
+type ConfigurationBackend interface {
+	GetPath() string
+	GetValue(key string) map[string]interface{}
+	GetString(key string) string
+	GetValues(key string) map[string]interface{}
 }
 
 // Load the configuration file
@@ -51,6 +64,42 @@ func LoadConfiguration(configDir string) *ServerConfiguration {
 	err = json.Unmarshal([]byte(data), &result)
 	if err != nil {
 		log.Error.Printf("Failed to parse json file %s: %v", file, err)
+		return nil
+	}
+	return &result
+}
+
+func ConfigurationFromBackend(configLocation string) *ServerConfiguration {
+	configParts := strings.Split(configLocation, ",")
+	var backendType string
+	var backendHost = "127.0.0.1:4100"
+	var configPath = "/deployd/config"
+	if len(configParts) == 3 {
+		backendType = configParts[0]
+		backendHost = configParts[1]
+		configPath = configParts[2]
+	} else if len(configParts) == 2 {
+		backendType = configParts[0]
+		backendHost = configParts[1]
+	}
+
+	var result ServerConfiguration
+	var configBackend ConfigurationBackend
+
+	switch backendType {
+	case "etcd":
+		var etcdBackend = new(conf.EtcdConf)
+		etcdBackend.Init(backendHost, configPath)
+		configBackend = etcdBackend
+	}
+
+	result.Backend = configBackend
+
+	data := configBackend.GetString(fmt.Sprintf("%s/config", configPath))
+
+	err := json.Unmarshal([]byte(data), &result)
+	if err != nil {
+		log.Error.Printf("Failed to parse json: %v", err)
 		return nil
 	}
 	return &result

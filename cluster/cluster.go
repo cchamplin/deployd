@@ -23,10 +23,13 @@
 package cluster
 
 import (
-	"../log"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
+
+	"../conf"
+	"../log"
 )
 
 type Cluster struct {
@@ -48,9 +51,24 @@ func (c *Cluster) ParseConfig(configDirectory string) {
 	}
 }
 
+func (c *Cluster) ParseConfigFromBackend(configBackend conf.ConfigurationBackend) {
+	log.Info.Printf("Loading cluster configuration from backend")
+
+	data := configBackend.GetString(fmt.Sprintf("%s/cluster", configBackend.GetPath()))
+
+	if err := json.Unmarshal([]byte(data), &c.ClusterConfig); err != nil {
+		log.Error.Printf("Failed to parse configuration: %v", err)
+	}
+}
+
 func (c *Cluster) Init(backend Backend, configDirectory string) {
 	c.Backend = backend
 	c.ParseConfig(configDirectory)
+}
+
+func (c *Cluster) InitFromConfig(backend Backend, config conf.ServerConfiguration) {
+	c.Backend = backend
+	c.ParseConfigFromBackend(config.Backend)
 }
 
 func (c *Cluster) AddMachine(machine *Machine) {
