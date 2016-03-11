@@ -26,9 +26,8 @@ import "net/http"
 
 type Route struct {
 	Name        string
-	Method      string
+	Methods     []string
 	Pattern     string
-	Permissions string
 	HandlerFunc http.HandlerFunc
 }
 
@@ -37,93 +36,68 @@ type Routes []Route
 var routes = Routes{
 	Route{
 		"Index",
-		"GET",
+		[]string{"GET"},
 		"/",
-		"Index",
 		Index,
 	},
 	Route{
-		"PackageIndex",
-		"GET",
+		"Packages",
+		[]string{"GET", "POST"},
 		"/packages",
-		"List Packages",
-		PackageIndex,
+		Packages,
 	},
 	Route{
-		"PackageShow",
-		"GET",
+		"PackageDetails",
+		[]string{"GET", "PUT"},
 		"/packages/{packageId}",
-		"Package Info",
-		PackageShow,
+		PackageDetails,
 	},
 	Route{
 		"PackageDeploy",
-		"POST",
+		[]string{"POST"},
 		"/packages/{packageId}/deploy",
-		"Deploy Package",
 		PackageDeploy,
 	},
 	Route{
 		"PackageDeployTemplate",
-		"POST",
+		[]string{"POST"},
 		"/packages/{packageId}/deploy/{templateName}",
-		"Deploy Template",
 		PackageDeployTemplate,
 	},
 	Route{
-		"DeploymentIndex",
-		"GET",
+		"Deployments",
+		[]string{"GET"},
 		"/deployments",
-		"List Deployments",
-		DeploymentIndex,
+		Deployments,
 	},
 	Route{
-		"DeploymentShow",
-		"GET",
+		"DeploymentDetails",
+		[]string{"GET"},
 		"/deployments/{deploymentId}",
-		"Deployment Info",
-		DeploymentShow,
+		DeploymentDetails,
 	},
 	Route{
 		"CurrentUser",
-		"GET",
+		[]string{"GET"},
 		"/auth",
-		"Current User",
 		CurrentUser,
 	},
 	Route{
 		"Login",
-		"POST",
+		[]string{"POST"},
 		"/auth",
-		"*",
 		Authenticate,
 	},
 	Route{
-		"UsersIndex",
-		"GET",
+		"Users",
+		[]string{"GET", "POST"},
 		"/users",
-		"List Users",
-		UserIndex,
+		Users,
 	},
 	Route{
-		"UsersShow",
-		"GET",
+		"UserDetails",
+		[]string{"GET", "PUT"},
 		"/users/{userId}",
-		"User Info",
-		UserShow,
-	},
-	Route{
-		"UserUpdate",
-		"PUT",
-		"/users/{userId}",
-		"User Info",
-		UpdateUser,
-	},
-	Route{
-		"UserCreate",
-		"POST",
-		"/users",
-		"User Info",
-		CreateUser,
+		UserDetails,
 	},
 }

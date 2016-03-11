@@ -27,8 +27,8 @@ import (
 	"path/filepath"
 	GoTemplate "text/template"
 
-	"../log"
-	"../metrics"
+	"github.com/cchamplin/deployd/log"
+	"github.com/cchamplin/deployd/metrics"
 	"github.com/satori/go.uuid"
 )
 

@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"../cluster"
-	"../deployment"
-	"../log"
+	"github.com/cchamplin/deployd/cluster"
+	"github.com/cchamplin/deployd/deployment"
+	"github.com/cchamplin/deployd/log"
 	"github.com/coreos/etcd/client"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"

@@ -25,7 +25,7 @@ package deployment
 import (
 	"os"
 
-	"../metrics"
+	"github.com/cchamplin/deployd/metrics"
 )
 
 type TemplateDef struct {

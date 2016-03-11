@@ -31,11 +31,11 @@ import (
 	"strconv"
 	GoTemplate "text/template"
 
-	backends "./backends/cluster"
-	"./cluster"
-	"./conf"
-	"./deployment"
-	"./log"
+	backends "github.com/cchamplin/deployd/backends/cluster"
+	"github.com/cchamplin/deployd/cluster"
+	"github.com/cchamplin/deployd/conf"
+	"github.com/cchamplin/deployd/deployment"
+	"github.com/cchamplin/deployd/log"
 )
 
 var repo *deployment.Repository
@@ -68,10 +68,10 @@ func main() {
 		}
 		config = conf.ConfigurationFromBackend(*configFromFlag)
 	} else {
-		config = conf.LoadConfiguration(*configFlag)
-		if config == nil {
-			golog.Fatal("deployd cannot be started without proper configuration")
-		}
+		config = conf.ConfigurationFromBackend("default," + *configFlag)
+	}
+	if config == nil {
+		golog.Fatal("deployd cannot be started without a valid configuration")
 	}
 
 	log.Info.Printf("Starting... %s", config.Addr+":"+strconv.Itoa(config.Port))
@@ -87,15 +87,20 @@ func main() {
 			clstr.Init(backend, *configFlag)
 		}
 		backend.Init(&clstr, cluster.LocalMachine(config.Addr+":"+strconv.Itoa(config.Port), config.AllowedTags))
+
 	}
 	// Initialize repo
 	repo = new(deployment.Repository)
-	var funcMap = GoTemplate.FuncMap{"getv": clstr.Backend.GetValue, "getvs": clstr.Backend.GetValues, "gets": clstr.Backend.GetString}
 
 	var journal log.Journal
 	if !*journalFlag {
 		log.Info.Printf("Starting with journaling")
 		journal = log.JournalFromConfig(config.Journal)
+	}
+
+	var funcMap GoTemplate.FuncMap
+	if !*clusterFlag {
+		funcMap = GoTemplate.FuncMap{"getv": clstr.Backend.GetValue, "getvs": clstr.Backend.GetValues, "gets": clstr.Backend.GetString}
 	}
 
 	repo.Init(*configFlag, config.AllowUntagged, config.AllowedTags, journal, funcMap, clstr.Backend)

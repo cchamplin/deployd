@@ -1,6 +1,6 @@
 package deployment
 
-import "../metrics"
+import "github.com/cchamplin/deployd/metrics"
 
 type ExecutionFragment struct {
 	Cmd         string `json:"cmd"`

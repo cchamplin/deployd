@@ -23,7 +23,7 @@
 package cluster
 
 import (
-	"../deployment"
+	"github.com/cchamplin/deployd/deployment"
 )
 
 type Backend interface {

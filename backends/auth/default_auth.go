@@ -19,39 +19,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+package auth
 
-package main
-
-import (
-	"github.com/cchamplin/deployd/log"
-	"github.com/gorilla/mux"
-	"net/http"
-)
-
-func addDefaultHeaders(fn http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		fn(w, r)
-	}
-}
-
-func NewRouter() *mux.Router {
-
-	router := mux.NewRouter().StrictSlash(true)
-	for _, route := range routes {
-		var handler http.Handler
-
-		handler = addDefaultHeaders(route.HandlerFunc)
-		handler = log.Logger(handler, route.Name)
-
-		router.
-			Methods(route.Methods...).
-			Path(route.Pattern).
-			//Headers("Content-Type", "application/json; charset=UTF-8").
-			Name(route.Name).
-			Handler(handler)
-
-	}
-
-	return router
+type DefaultAuth struct {
+	path string
 }

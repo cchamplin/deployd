@@ -28,8 +28,8 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
-	"../conf"
-	"../log"
+	"github.com/cchamplin/deployd/conf"
+	"github.com/cchamplin/deployd/log"
 )
 
 type Cluster struct {

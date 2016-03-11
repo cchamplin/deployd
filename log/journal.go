@@ -29,6 +29,10 @@ type FileJournal struct {
 	mutex          *sync.Mutex
 }
 
+func (j FileJournal) String() string {
+	return fmt.Sprintf("FilePath: %s, FSyncInterval: %d, FSyncOnWrite: %t, BackupInterval: %d, BackupOnWrite: %t, MaxBackups: %d", j.FilePath, j.FSyncInterval, j.FSyncOnWrite, j.BackupInterval, j.BackupOnWrite)
+}
+
 func (j FileJournal) WriteEntry(entry interface{}) bool {
 
 	// TODO is this a race condition?

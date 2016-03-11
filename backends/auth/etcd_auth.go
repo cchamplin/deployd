@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package conf
+package auth
 
 import (
 	"encoding/json"
@@ -32,14 +32,14 @@ import (
 	"golang.org/x/net/context"
 )
 
-type EtcdConf struct {
+type EtcdAuth struct {
 	etcdConfig client.Config
 	etcdClient client.Client
 	kapi       client.KeysAPI
 	path       string
 }
 
-func (e *EtcdConf) Init(endpoint string, path string) {
+func (e *EtcdAuth) Init(endpoint string, path string) {
 	e.path = path
 	var endpoints []string
 	endpoints = append(endpoints, fmt.Sprintf("http://%s", endpoint))
@@ -66,11 +66,11 @@ func (e *EtcdConf) Init(endpoint string, path string) {
 
 }
 
-func (e *EtcdConf) GetPath() string {
+func (e *EtcdAuth) GetPath() string {
 	return e.path
 }
 
-func (e *EtcdConf) GetValue(key string) map[string]interface{} {
+func (e *EtcdAuth) GetValue(key string) map[string]interface{} {
 	result, err := e.kapi.Get(context.Background(), key, nil)
 	if err != nil {
 		log.Warning.Printf("Could not load key value: %s", key)
@@ -98,7 +98,7 @@ func (e *EtcdConf) GetValue(key string) map[string]interface{} {
 	return nil
 }
 
-func (e *EtcdConf) GetString(key string) string {
+func (e *EtcdAuth) GetString(key string) string {
 	result, err := e.kapi.Get(context.Background(), key, nil)
 	if err != nil {
 		log.Warning.Printf("Could not load key value: %s", key)
@@ -116,7 +116,7 @@ func (e *EtcdConf) GetString(key string) string {
 	return ""
 }
 
-func (e *EtcdConf) GetValues(key string) map[string]interface{} {
+func (e *EtcdAuth) GetValues(key string) map[string]interface{} {
 	result, err := e.kapi.Get(context.Background(), key, nil)
 	if err != nil {
 		log.Warning.Printf("Could not load key value: %s", key)

@@ -30,9 +30,9 @@ import (
 	"sync"
 	"time"
 
-	"../../cluster"
-	"../../deployment"
-	"../../log"
+	"github.com/cchamplin/deployd/cluster"
+	"github.com/cchamplin/deployd/deployment"
+	"github.com/cchamplin/deployd/log"
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 )

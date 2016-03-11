@@ -31,7 +31,7 @@ import (
 	"os"
 	"os/exec"
 
-	"../log"
+	"github.com/cchamplin/deployd/log"
 	//"strings"
 	GoTemplate "text/template"
 )

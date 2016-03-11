@@ -25,12 +25,10 @@ package conf
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
+	"github.com/cchamplin/deployd/auth"
+	"github.com/cchamplin/deployd/backends/conf"
+	"github.com/cchamplin/deployd/log"
 	"strings"
-
-	"../backends/conf"
-	"../log"
 )
 
 type ServerConfiguration struct {
@@ -39,7 +37,7 @@ type ServerConfiguration struct {
 	AllowedTags   []string               `json:"allowed-tags"`
 	AllowUntagged bool                   `json:"allow-untagged"`
 	Journal       map[string]interface{} `json:"journal"`
-	AuthToken     string                 `json:"auth-token"`
+	Auth          map[string]interface{} `json:"journal"`
 	Backend       ConfigurationBackend
 }
 
@@ -48,25 +46,6 @@ type ConfigurationBackend interface {
 	GetValue(key string) map[string]interface{}
 	GetString(key string) string
 	GetValues(key string) map[string]interface{}
-}
-
-// Load the configuration file
-func LoadConfiguration(configDir string) *ServerConfiguration {
-	var result ServerConfiguration
-	// Should we utilize a .conf prefix for configuration file?
-	file := filepath.Clean(configDir + "/deployd.json")
-	data, err := ioutil.ReadFile(file)
-	if err != nil {
-		log.Error.Printf("Failed to read file %s: %v", file, err)
-		return nil
-	}
-
-	err = json.Unmarshal([]byte(data), &result)
-	if err != nil {
-		log.Error.Printf("Failed to parse json file %s: %v", file, err)
-		return nil
-	}
-	return &result
 }
 
 func ConfigurationFromBackend(configLocation string) *ServerConfiguration {
@@ -91,11 +70,18 @@ func ConfigurationFromBackend(configLocation string) *ServerConfiguration {
 		var etcdBackend = new(conf.EtcdConf)
 		etcdBackend.Init(backendHost, configPath)
 		configBackend = etcdBackend
+	case "default", "fs", "json":
+		var defaultBackend = new(conf.DefaultConf)
+		defaultBackend.Init(backendHost)
+		configBackend = defaultBackend
+	default:
+		log.Error.Printf("%s is an unknown configuration provider", backendType)
+		return nil
 	}
 
 	result.Backend = configBackend
 
-	data := configBackend.GetString(fmt.Sprintf("%s/config", configPath))
+	data := configBackend.GetString(fmt.Sprintf("%s/config", configBackend.GetPath()))
 
 	err := json.Unmarshal([]byte(data), &result)
 	if err != nil {

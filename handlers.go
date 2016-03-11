@@ -28,7 +28,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"./log"
+	"github.com/cchamplin/deployd/log"
 	"github.com/gorilla/mux"
 )
 
@@ -38,7 +38,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 }
 
 // Return listing of packages
-func PackageIndex(w http.ResponseWriter, r *http.Request) {
+func Packages(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(repo.Packages()); err != nil {
 		log.Error.Printf("Package index request failed, encoding error: %v", err)
@@ -47,7 +47,7 @@ func PackageIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // Return package details for specific package ID
-func PackageShow(w http.ResponseWriter, r *http.Request) {
+func PackageDetails(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	packageId := vars["packageId"]
@@ -72,7 +72,7 @@ func PackageShow(w http.ResponseWriter, r *http.Request) {
 }
 
 // List deployed packages
-func DeploymentIndex(w http.ResponseWriter, r *http.Request) {
+func Deployments(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(repo.Deployments()); err != nil {
 		log.Error.Printf("Deployment index request failed, encoding error: %v", err)
@@ -81,7 +81,7 @@ func DeploymentIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // Return deployment details for deploymentId
-func DeploymentShow(w http.ResponseWriter, r *http.Request) {
+func DeploymentDetails(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	deploymentId := vars["deploymentId"]
@@ -207,10 +207,10 @@ func CurrentUser(w http.ResponseWriter, r *http.Request) {
 func Authenticate(w http.ResponseWriter, r *http.Request) {
 }
 
-func UserIndex(w http.ResponseWriter, r *http.Request) {
+func Users(w http.ResponseWriter, r *http.Request) {
 }
 
-func UserShow(w http.ResponseWriter, r *http.Request) {
+func UserDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateUser(w http.ResponseWriter, r *http.Request) {

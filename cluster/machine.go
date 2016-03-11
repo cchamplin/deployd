@@ -23,9 +23,9 @@
 package cluster
 
 import (
-	"../deployment"
-	"../log"
 	"encoding/json"
+	"github.com/cchamplin/deployd/deployment"
+	"github.com/cchamplin/deployd/log"
 	"io/ioutil"
 	"os"
 	"path/filepath"

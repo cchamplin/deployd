@@ -33,8 +33,8 @@ import (
 	"strconv"
 	"sync"
 
-	"../log"
-	"../metrics"
+	"github.com/cchamplin/deployd/log"
+	"github.com/cchamplin/deployd/metrics"
 
 	GoTemplate "text/template"
 )
