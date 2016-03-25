@@ -351,7 +351,7 @@ func exec_cmd(cmd string) (string, bool) {
 	go func() {
 		for errScanner.Scan() {
 			//log.Trace.Printf("Error: %s\n", errScanner.Text())
-			buffer.WriteString(scanner.Text())
+			buffer.WriteString(errScanner.Text())
 		}
 	}()
 
